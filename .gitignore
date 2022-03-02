@@ -1,0 +1,14 @@
+.vs/
+build/
+
+*.o
+*.obj
+*.exe
+*.pdb
+
+stb_image.c
+a.c
+
+run4coder.bat
+project.4coder
+test.rdbg
