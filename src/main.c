@@ -31,6 +31,8 @@ typedef struct COFF_FileHeader {
 static_assert(sizeof(COFF_FileHeader) == 20, "COFF File header size != 20 bytes");
 
 int main(int argc, char* argv[]) {
+	setvbuf(stdout, NULL, _IONBF, 0);
+	
 	if (argc < 1) {
 		printf("error: no input file!\n");
 		return 1;
@@ -39,7 +41,6 @@ int main(int argc, char* argv[]) {
 	printf("Opening %s...\n", argv[1]);
 	
 	// Read sum bites
-	static char buffer[1 << 20];
 	FILE* file = fopen(argv[1], "rb");
 	if (file == NULL) {
 		printf("could not open file!\n");
@@ -50,11 +51,7 @@ int main(int argc, char* argv[]) {
 	size_t length = ftell(file);
 	rewind(file);
 	
-	if (length >= sizeof(buffer)) {
-		printf("File too big!!");
-		abort();
-	}
-	
+	char* buffer = malloc(length * sizeof(char));
 	fread(buffer, length, sizeof(char), file);
 	fclose(file);
 	
@@ -124,11 +121,16 @@ int main(int argc, char* argv[]) {
 		printf("%s\t", tmp);
 		
 		for (int j = 0; j < inst.operand_count; j++) {
-			if (j) printf(", ");
+			if (j) printf(",");
 			
-			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j]);
-			if (inst.operands[j].type == X86_OPERAND_RIP ||
-				inst.operands[j].type == X86_OPERAND_MEM) {
+			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
+			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
+				int64_t base_address = (input.data - text_section_start)
+					+ result.instruction_length;
+				
+				printf("%llx", base_address + inst.operands[j].offset);
+			} else if (inst.operands[j].type == X86_OPERAND_RIP ||
+					   inst.operands[j].type == X86_OPERAND_MEM) {
 				printf("%s ptr ", x86_get_data_type_string(inst.data_type));
 				
 				if (inst.segment != X86_SEGMENT_DEFAULT) {

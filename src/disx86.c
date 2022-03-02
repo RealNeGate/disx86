@@ -99,7 +99,7 @@ static bool x86_parse_memory_op(X86_Buffer* restrict in, X86_Operand* restrict d
 				X86_OPERAND_MEM, .mem = { base_gpr, index_gpr, scale }
 			};
 		} else {
-			if (rm == X86_RBP) {
+			if (mod == MOD_INDIRECT && rm == X86_RBP) {
 				// RIP-relative addressing
 				int32_t disp = x86__read_uint32(in);
 				*dst = (X86_Operand){ X86_OPERAND_RIP, .rip_mem = { disp } };
@@ -225,6 +225,55 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			}
 			break;
 		}
+		case 0x50:
+		case 0x54: {
+			// 50+ rd PUSH
+			out->type = X86_INST_PUSH;
+			out->data_type = X86_TYPE_QWORD;
+			out->operand_count = 1;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | (op - 0x50)
+			};
+			break;
+		}
+		case 0x58:
+		case 0x5C: {
+			// 58+ rd POP
+			out->type = X86_INST_POP;
+			out->data_type = X86_TYPE_QWORD;
+			out->operand_count = 1;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | (op - 0x58)
+			};
+			break;
+		}
+		case 0x68: {
+			if (op == 0x68) {
+				// PUSH imm8
+				int8_t imm = x86__read_uint8(&in);
+				
+				out->type = X86_INST_PUSH;
+				out->data_type = X86_TYPE_QWORD;
+				out->operand_count = 1;
+				out->operands[0] = (X86_Operand){
+					X86_OPERAND_IMM, .imm = imm
+				};
+			} else if (op == 0x6A) {
+				// PUSH imm32
+				int32_t imm = x86__read_uint32(&in);
+				
+				out->type = X86_INST_PUSH;
+				out->data_type = X86_TYPE_QWORD;
+				out->operand_count = 1;
+				out->operands[0] = (X86_Operand){
+					X86_OPERAND_IMM, .imm = imm
+				};
+			} else {
+				code = X86_RESULT_UNKNOWN_OPCODE;
+				goto done;
+			}
+			break;
+		}
 		case 0x70:
 		case 0x74:
 		case 0x78:
@@ -232,7 +281,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			out->type = X86_INST_JO + (op - 0x70);
 			out->data_type = X86_TYPE_NONE;
 			
-			uint8_t offset = x86__read_uint8(&in);
+			int8_t offset = x86__read_uint8(&in);
 			
 			out->operand_count = 1;
 			out->operands[0] = (X86_Operand){
@@ -285,28 +334,49 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 		case 0x8C: {
-			if (op != 0x8D) {
+			if (op == 0x8D) {
+				// 0x8D lea
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->type = X86_INST_LEA;
+				out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
+				out->operand_count = 2;
+				out->operands[0] = (X86_Operand) {
+					X86_OPERAND_GPR, .gpr = rx
+				};
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[1], mod, rm, rex)) {
+					code = X86_RESULT_OUT_OF_SPACE;
+					goto done;
+				}
+			} else if (op == 0x8F) {
+				// 0x8F /0 pop
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->type = X86_INST_POP;
+				out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
+				out->operand_count = 1;
+				
+				if (rx != 0) {
+					code = X86_RESULT_UNKNOWN_OPCODE;
+					goto done;
+				}
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_OUT_OF_SPACE;
+					goto done;
+				}
+			} else {
 				// TODO(NeGate): incomplete... probably?
-				code = X86_RESULT_OUT_OF_SPACE;
-				goto done;
-			}
-			
-			// 0x8D lea
-			uint8_t mod_rx_rm = x86__read_uint8(&in);
-			
-			uint8_t mod, rx, rm;
-			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
-			
-			out->type = X86_INST_LEA;
-			out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
-			out->operand_count = 2;
-			out->operands[0] = (X86_Operand) {
-				X86_OPERAND_GPR, .gpr = rx
-			};
-			
-			// parse r/m operand
-			if (!x86_parse_memory_op(&in, &out->operands[1], mod, rm, rex)) {
-				code = X86_RESULT_OUT_OF_SPACE;
+				code = X86_RESULT_UNKNOWN_OPCODE;
 				goto done;
 			}
 			break;
@@ -337,6 +407,34 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 				uint32_t imm = x86__read_uint32(&in);
 				out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
 			}
+			break;
+		}
+		case 0xC4: {
+			if (op != 0xC7) {
+				// TODO(NeGate): incomplete... maybe
+				code = X86_RESULT_UNKNOWN_OPCODE;
+				goto done;
+			}
+			
+			// OP r/m, imm
+			uint8_t mod_rx_rm = x86__read_uint8(&in);
+			
+			uint8_t mod, rx, rm;
+			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+			
+			out->type = X86_INST_MOV;
+			out->data_type = rex & 8 ? X86_TYPE_QWORD : (addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD);
+			out->operand_count = 2;
+			
+			// parse r/m operand
+			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+				code = X86_RESULT_OUT_OF_SPACE;
+				goto done;
+			}
+			
+			// parse immediate
+			int32_t imm = x86__read_uint32(&in);
+			out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
 			break;
 		}
 		case 0xCC: {
@@ -613,10 +711,10 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 				}
 				case 0x80 ... 0x8F: {
 					// jcc rel32
-					out->type = X86_INST_JO + (op - 0x70);
+					out->type = X86_INST_JO + (ext_opcode - 0x80);
 					out->data_type = X86_TYPE_NONE;
 					
-					uint8_t offset = x86__read_uint8(&in);
+					int32_t offset = x86__read_uint32(&in);
 					
 					out->operand_count = 1;
 					out->operands[0] = (X86_Operand){
@@ -628,6 +726,34 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 					code = X86_RESULT_UNKNOWN_OPCODE;
 					goto done;
 				}
+			}
+			break;
+		}
+		case 0xFC: {
+			if (op != 0xFF) {
+				code = X86_RESULT_UNKNOWN_OPCODE;
+				goto done;
+			}
+			
+			uint8_t mod_rx_rm = x86__read_uint8(&in);
+			
+			uint8_t mod, rx, rm;
+			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+			
+			out->type = X86_INST_PUSH;
+			out->data_type = addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD;
+			out->operand_count = 1;
+			
+			if (rx != 0) {
+				// rx has to be 0 tho
+				code = X86_RESULT_INVALID_RX;
+				goto done;
+			}
+			
+			// parse r/m operand
+			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+				code = X86_RESULT_UNKNOWN_OPCODE;
+				goto done;
 			}
 			break;
 		}
@@ -650,10 +776,18 @@ X86_Buffer x86_advance(X86_Buffer in, size_t amount) {
 	return in;
 }
 
-size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op) {
-	static const char* X86__GPR_NAMES[] = {
-		"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-		"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op, X86_DataType dt) {
+	static const char* X86__GPR_NAMES[4][16] = {
+		{ "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" },
+		
+		{ "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
+			"r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" },
+		
+		{ "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
+			"r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" },
+		
+		{ "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+			"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" }
 	};
 	
 	switch (op->type) {
@@ -662,7 +796,7 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op)
 			return 0;
 		}
 		case X86_OPERAND_GPR: {
-			return snprintf(out, out_capacity, "%s", X86__GPR_NAMES[op->gpr]);
+			return snprintf(out, out_capacity, "%s", X86__GPR_NAMES[dt - X86_TYPE_BYTE][op->gpr]);
 		}
 		case X86_OPERAND_XMM: {
 			return snprintf(out, out_capacity, "xmm%d", op->xmm);
@@ -680,19 +814,19 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op)
 									op->mem.disp);
 				} else {
 					return snprintf(out, out_capacity, "[%s + %d]",
-									X86__GPR_NAMES[op->mem.base],
+									X86__GPR_NAMES[3][op->mem.base],
 									op->mem.disp);
 				}
 			} else {
 				if (op->mem.base == X86_GPR_NONE) {
 					return snprintf(out, out_capacity, "[%s*%d + %d]",
-									X86__GPR_NAMES[op->mem.index],
+									X86__GPR_NAMES[3][op->mem.index],
 									1 << op->mem.scale,
 									op->mem.disp);
 				} else {
 					return snprintf(out, out_capacity, "[%s + %s*%d + %d]",
-									X86__GPR_NAMES[op->mem.base],
-									X86__GPR_NAMES[op->mem.index],
+									X86__GPR_NAMES[3][op->mem.base],
+									X86__GPR_NAMES[3][op->mem.index],
 									1 << op->mem.scale,
 									op->mem.disp);
 				}
@@ -713,6 +847,8 @@ size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_Da
 		case X86_INST_NOP: simple = "nop"; break;
 		case X86_INST_INT: simple = "int"; break;
 		case X86_INST_RET: simple = "ret"; break;
+		case X86_INST_PUSH:simple = "push"; break;
+		case X86_INST_POP: simple = "pop"; break;
 		case X86_INST_MOV: simple = "mov"; break;
 		case X86_INST_ADD: simple = "add"; break;
 		case X86_INST_AND: simple = "and"; break;
