@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
 		X86_Inst inst;
 		X86_Result result = x86_disasm(input, &inst);
 		if (result.code != X86_RESULT_SUCCESS) {
-			printf("disassembler error: %s\n", x86_get_result_string(result.code));
+			printf("disassembler error: %s (%x)\n", x86_get_result_string(result.code), input.data[result.instruction_length-1]);
 			abort();
 		}
 		

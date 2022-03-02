@@ -292,11 +292,11 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case 0x80: {
 			// detect data type
 			// TODO(NeGate): implement WORD support with the 66h (addr16) prefix
-			if (rex & 8) out->data_type = X86_TYPE_QWORD;
-			else {
-				if (op & 1) out->data_type = X86_TYPE_DWORD;
-				else out->data_type = X86_TYPE_BYTE;
-			}
+			if (op == 0x81) {
+				if (rex & 8) out->data_type = X86_TYPE_QWORD;
+				else if (addr16) out->data_type = X86_TYPE_WORD;
+				else out->data_type = X86_TYPE_DWORD;
+			} else out->data_type = X86_TYPE_BYTE;
 			
 			// OP r/m, imm
 			uint8_t mod_rx_rm = x86__read_uint8(&in);
@@ -322,7 +322,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			}
 			
 			// parse immediate
-			if (op & 2) {
+			if ((op & 2) || out->data_type == X86_TYPE_BYTE) {
 				// imm8
 				int8_t imm = x86__read_uint8(&in);
 				out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
@@ -330,6 +330,39 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 				// imm32
 				int32_t imm = x86__read_uint32(&in);
 				out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
+			}
+			break;
+		}
+		case 0x84: {
+			if (op != 0x84 && op != 0x85) {
+				code = X86_RESULT_OUT_OF_SPACE;
+				goto done;
+			}
+			
+			// OP r/m, imm
+			uint8_t mod_rx_rm = x86__read_uint8(&in);
+			
+			uint8_t mod, rx, rm;
+			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+			
+			out->type = X86_INST_TEST;
+			
+			// detect data type
+			if (op & 1) {
+				if (rex & 8) out->data_type = X86_TYPE_QWORD;
+				if (addr16) out->data_type = X86_TYPE_WORD;
+				else out->data_type = X86_TYPE_DWORD;
+			} else out->data_type = X86_TYPE_BYTE;
+			
+			out->operand_count = 2;
+			out->operands[1] = (X86_Operand){ 
+				X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | rx
+			};
+			
+			// parse r/m operand
+			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+				code = X86_RESULT_OUT_OF_SPACE;
+				goto done;
 			}
 			break;
 		}
@@ -410,31 +443,51 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 		case 0xC4: {
-			if (op != 0xC7) {
+			if (op == 0xC6) {
+				// OP r/m8, imm8
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->type = X86_INST_MOV;
+				out->data_type = X86_TYPE_BYTE;
+				out->operand_count = 2;
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_OUT_OF_SPACE;
+					goto done;
+				}
+				
+				// parse immediate
+				int8_t imm = x86__read_uint8(&in);
+				out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
+			} else if (op == 0xC7) {
+				// OP r/m, imm
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->type = X86_INST_MOV;
+				out->data_type = rex & 8 ? X86_TYPE_QWORD : (addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD);
+				out->operand_count = 2;
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_OUT_OF_SPACE;
+					goto done;
+				}
+				
+				// parse immediate
+				int32_t imm = x86__read_uint32(&in);
+				out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
+			} else {
 				// TODO(NeGate): incomplete... maybe
 				code = X86_RESULT_UNKNOWN_OPCODE;
 				goto done;
 			}
-			
-			// OP r/m, imm
-			uint8_t mod_rx_rm = x86__read_uint8(&in);
-			
-			uint8_t mod, rx, rm;
-			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
-			
-			out->type = X86_INST_MOV;
-			out->data_type = rex & 8 ? X86_TYPE_QWORD : (addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD);
-			out->operand_count = 2;
-			
-			// parse r/m operand
-			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
-				code = X86_RESULT_OUT_OF_SPACE;
-				goto done;
-			}
-			
-			// parse immediate
-			int32_t imm = x86__read_uint32(&in);
-			out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
 			break;
 		}
 		case 0xCC: {
@@ -857,6 +910,7 @@ size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_Da
 		case X86_INST_OR:  simple = "or"; break;
 		case X86_INST_CMP: simple = "cmp"; break;
 		case X86_INST_LEA: simple = "lea"; break;
+		case X86_INST_TEST: simple = "test"; break;
 		
 		case X86_INST_CALL: simple = "call"; break;
 		case X86_INST_JMP: simple = "jmp"; break;
