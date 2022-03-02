@@ -2,7 +2,6 @@
 build/
 
 *.o
-*.obj
 *.exe
 *.pdb
 
