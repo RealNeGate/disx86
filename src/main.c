@@ -124,11 +124,16 @@ int main(int argc, char* argv[]) {
 		printf("%s\t", tmp);
 		
 		for (int j = 0; j < inst.operand_count; j++) {
-			if (j) printf(", ");
+			if (j) printf(",");
 			
-			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j]);
-			if (inst.operands[j].type == X86_OPERAND_RIP ||
-				inst.operands[j].type == X86_OPERAND_MEM) {
+			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
+			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
+				int64_t base_address = (input.data - text_section_start)
+					+ result.instruction_length;
+				
+				printf("%llx", base_address + inst.operands[j].offset);
+			} else if (inst.operands[j].type == X86_OPERAND_RIP ||
+					   inst.operands[j].type == X86_OPERAND_MEM) {
 				printf("%s ptr ", x86_get_data_type_string(inst.data_type));
 				
 				if (inst.segment != X86_SEGMENT_DEFAULT) {

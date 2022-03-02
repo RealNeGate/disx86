@@ -185,7 +185,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out);
 X86_Buffer x86_advance(X86_Buffer in, size_t amount);
 
 // Pretty formats
-size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op);
+size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op, X86_DataType dt);
 size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_DataType dt);
 
 const char* x86_get_segment_string(X86_Segment segment);

@@ -232,7 +232,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			out->type = X86_INST_JO + (op - 0x70);
 			out->data_type = X86_TYPE_NONE;
 			
-			uint8_t offset = x86__read_uint8(&in);
+			int8_t offset = x86__read_uint8(&in);
 			
 			out->operand_count = 1;
 			out->operands[0] = (X86_Operand){
@@ -616,7 +616,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 					out->type = X86_INST_JO + (op - 0x70);
 					out->data_type = X86_TYPE_NONE;
 					
-					uint8_t offset = x86__read_uint8(&in);
+					int32_t offset = x86__read_uint32(&in);
 					
 					out->operand_count = 1;
 					out->operands[0] = (X86_Operand){
@@ -650,10 +650,18 @@ X86_Buffer x86_advance(X86_Buffer in, size_t amount) {
 	return in;
 }
 
-size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op) {
-	static const char* X86__GPR_NAMES[] = {
-		"rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
-		"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
+size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op, X86_DataType dt) {
+	static const char* X86__GPR_NAMES[4][16] = {
+		{ "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" },
+		
+		{ "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
+			"r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" },
+		
+		{ "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi",
+			"r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d" },
+		
+		{ "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+			"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" }
 	};
 	
 	switch (op->type) {
@@ -662,7 +670,7 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op)
 			return 0;
 		}
 		case X86_OPERAND_GPR: {
-			return snprintf(out, out_capacity, "%s", X86__GPR_NAMES[op->gpr]);
+			return snprintf(out, out_capacity, "%s", X86__GPR_NAMES[dt - X86_TYPE_BYTE][op->gpr]);
 		}
 		case X86_OPERAND_XMM: {
 			return snprintf(out, out_capacity, "xmm%d", op->xmm);
@@ -680,19 +688,19 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op)
 									op->mem.disp);
 				} else {
 					return snprintf(out, out_capacity, "[%s + %d]",
-									X86__GPR_NAMES[op->mem.base],
+									X86__GPR_NAMES[3][op->mem.base],
 									op->mem.disp);
 				}
 			} else {
 				if (op->mem.base == X86_GPR_NONE) {
 					return snprintf(out, out_capacity, "[%s*%d + %d]",
-									X86__GPR_NAMES[op->mem.index],
+									X86__GPR_NAMES[3][op->mem.index],
 									1 << op->mem.scale,
 									op->mem.disp);
 				} else {
 					return snprintf(out, out_capacity, "[%s + %s*%d + %d]",
-									X86__GPR_NAMES[op->mem.base],
-									X86__GPR_NAMES[op->mem.index],
+									X86__GPR_NAMES[3][op->mem.base],
+									X86__GPR_NAMES[3][op->mem.index],
 									1 << op->mem.scale,
 									op->mem.disp);
 				}
