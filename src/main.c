@@ -98,22 +98,14 @@ int main(int argc, char* argv[]) {
 		printf("    %016llx: ", input.data - text_section_start);
 		
 		// Print code bytes
-		int j = 0;
-		while (j < result.instruction_length) {
+		for (int j = 0; j < 6 && j < result.instruction_length; j++) {
 			printf("%02x ", input.data[j]);
-			
-			if (j && j % 6 == 5) {
-				break;
-			}
-			j++;
 		}
 		
 		int remaining = result.instruction_length > 6 
 			? 0 : 6 - result.instruction_length;
 		
-		while (remaining--) {
-			printf("   ");
-		}
+		while (remaining--) printf("   ");
 		
 		// Print some instruction
 		char tmp[32];
@@ -145,9 +137,10 @@ int main(int argc, char* argv[]) {
 		
 		printf("\n");
 		
-		if (j > result.instruction_length) {
+		if (result.instruction_length > 6) {
 			printf("                      ");
 			
+			size_t j = 6;
 			while (j < result.instruction_length) {
 				printf("%02x ", input.data[j]);
 				
@@ -157,6 +150,8 @@ int main(int argc, char* argv[]) {
 				}
 				j++;
 			}
+			
+			printf("\n");
 		}
 		
 		input = x86_advance(input, result.instruction_length);
