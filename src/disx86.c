@@ -166,7 +166,42 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	X86_ResultCode code = X86_RESULT_SUCCESS;
 	switch (op & 0xFC) {
 		case 0xC0: {
-			if (op == 0xC2) {
+			if (op == 0xC0 || op == 0xC1) {
+				// shl, shr, sar
+				// detect data type
+				if (op & 1) {
+					if (rex & 8) out->data_type = X86_TYPE_QWORD;
+					else if (addr16) out->data_type = X86_TYPE_WORD;
+					else out->data_type = X86_TYPE_DWORD;
+				} else out->data_type = X86_TYPE_BYTE;
+				
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				switch (rx) {
+					case 4: out->type = X86_INST_SHL; break;
+					case 5: out->type = X86_INST_SHR; break;
+					case 7: out->type = X86_INST_SAR; break;
+					default: {
+						// TODO(NeGate): incomplete... maybe
+						code = X86_RESULT_UNKNOWN_OPCODE;
+						goto done;
+					}
+				}
+				
+				out->operand_count = 2;
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_OUT_OF_SPACE;
+					goto done;
+				}
+				
+				uint8_t imm = x86__read_uint8(&in);
+				out->operands[1] = (X86_Operand){ 
+					X86_OPERAND_IMM, .imm = imm
+				};
+			} else if (op == 0xC2) {
 				uint16_t imm = x86__read_uint16(&in);
 				
 				out->type = X86_INST_RET;
@@ -186,6 +221,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		}
 		case 0x00:
 		case 0x08:
+		case 0x18:
 		case 0x28:
 		case 0x30:
 		case 0x38:
@@ -193,6 +229,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			switch (op & 0xFC) {
 				case 0x00: out->type = X86_INST_ADD; break;
 				case 0x08: out->type = X86_INST_OR; break;
+				case 0x18: out->type = X86_INST_SBB; break;
 				case 0x28: out->type = X86_INST_SUB; break;
 				case 0x30: out->type = X86_INST_XOR; break;
 				case 0x38: out->type = X86_INST_CMP; break;
@@ -627,6 +664,30 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 					}
 					break;
 				}
+				case 0x40 ... 0x4F: {
+					// cmovcc reg, r/m
+					out->type = X86_INST_CMOVO + (ext_opcode - 0x40);
+					
+					// detect data type
+					if (rex & 8) out->data_type = X86_TYPE_QWORD;
+					if (addr16) out->data_type = X86_TYPE_WORD;
+					else out->data_type = X86_TYPE_DWORD;
+					
+					uint8_t mod_rx_rm = x86__read_uint8(&in);
+					uint8_t mod, rx, rm;
+					DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+					
+					out->operand_count = 2;
+					out->operands[0] = (X86_Operand){ 
+						X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | rx
+					};
+					
+					if (!x86_parse_memory_op(&in, &out->operands[1], mod, rm, rex)) {
+						code = X86_RESULT_OUT_OF_SPACE;
+						goto done;
+					}
+					break;
+				}
 				case 0x58:
 				case 0x59:
 				case 0x5C:
@@ -849,6 +910,53 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 					}
 					break;
 				}
+				case 0xAF: {
+					// imul reg, r/m
+					out->type = X86_INST_IMUL;
+					
+					if (rex & 8) out->data_type = X86_TYPE_QWORD;
+					if (addr16) out->data_type = X86_TYPE_WORD;
+					else out->data_type = X86_TYPE_DWORD;
+					
+					uint8_t mod_rx_rm = x86__read_uint8(&in);
+					
+					uint8_t mod, rx, rm;
+					DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+					
+					out->operand_count = 2;
+					out->operands[0] = (X86_Operand){
+						X86_OPERAND_GPR, .gpr = rx
+					};
+					
+					if (!x86_parse_memory_op(&in, &out->operands[1], mod, rm, rex)) {
+						code = X86_RESULT_OUT_OF_SPACE;
+						goto done;
+					}
+					break;
+				}
+				case 0xB6:
+				case 0xB7: {
+					out->type = op & 1 ? X86_INST_MOVZXW : X86_INST_MOVZXB;
+					out->data_type = rex & 8 ? X86_TYPE_QWORD : X86_TYPE_DWORD;
+					if ((rex & 8) == 0 && addr16 && op == 0xB6) {
+						out->data_type = X86_TYPE_WORD;
+					}
+					
+					uint8_t mod_rx_rm = x86__read_uint8(&in);
+					uint8_t mod, rx, rm;
+					DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+					
+					out->operand_count = 2;
+					out->operands[0] = (X86_Operand){
+						X86_OPERAND_GPR, .gpr = rx
+					};
+					
+					if (!x86_parse_memory_op(&in, &out->operands[1], mod, rm, rex)) {
+						code = X86_RESULT_OUT_OF_SPACE;
+						goto done;
+					}
+					break;
+				}
 				default: {
 					code = X86_RESULT_UNKNOWN_OPCODE;
 					goto done;
@@ -856,29 +964,70 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			}
 			break;
 		}
-		case 0xFC: {
-			if (op != 0xFF) {
+		case 0xF4: {
+			if (op == 0xF6 || op == 0xF7) {
+				out->type = X86_INST_TEST;
+				
+				if (op & 1) {
+					if (rex & 8) out->data_type = X86_TYPE_QWORD;
+					if (addr16) out->data_type = X86_TYPE_WORD;
+					else out->data_type = X86_TYPE_DWORD;
+				} else out->data_type = X86_TYPE_BYTE;
+				
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->operand_count = 2;
+				if (rx != 0) {
+					// rx has to be 0 tho
+					code = X86_RESULT_INVALID_RX;
+					goto done;
+				}
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_UNKNOWN_OPCODE;
+					goto done;
+				}
+				
+				if (op & 1) {
+					uint32_t imm = x86__read_uint32(&in);
+					out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
+				} else {
+					uint8_t imm = x86__read_uint8(&in);
+					out->operands[1] = (X86_Operand){ X86_OPERAND_IMM, .imm = imm };
+				}
+			} else {
 				code = X86_RESULT_UNKNOWN_OPCODE;
 				goto done;
 			}
-			
-			uint8_t mod_rx_rm = x86__read_uint8(&in);
-			
-			uint8_t mod, rx, rm;
-			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
-			
-			out->type = X86_INST_PUSH;
-			out->data_type = addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD;
-			out->operand_count = 1;
-			
-			if (rx != 0) {
-				// rx has to be 0 tho
-				code = X86_RESULT_INVALID_RX;
-				goto done;
-			}
-			
-			// parse r/m operand
-			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+			break;
+		}
+		case 0xFC: {
+			if (op == 0xFF) {
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+				
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+				
+				out->type = X86_INST_PUSH;
+				out->data_type = addr16 ? X86_TYPE_WORD : X86_TYPE_DWORD;
+				out->operand_count = 1;
+				
+				if (rx != 0) {
+					// rx has to be 0 tho
+					code = X86_RESULT_INVALID_RX;
+					goto done;
+				}
+				
+				// parse r/m operand
+				if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+					code = X86_RESULT_UNKNOWN_OPCODE;
+					goto done;
+				}
+			} else {
 				code = X86_RESULT_UNKNOWN_OPCODE;
 				goto done;
 			}
@@ -981,6 +1130,11 @@ size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_Da
 		case X86_INST_POP: simple = "pop"; break;
 		case X86_INST_MOV: simple = "mov"; break;
 		case X86_INST_MOVSXD: simple = "movsxd"; break;
+		case X86_INST_MOVZXB: simple = "movzx"; break;
+		case X86_INST_MOVZXW: simple = "movzx"; break;
+		case X86_INST_SHL: simple = "shl"; break;
+		case X86_INST_SHR: simple = "shr"; break;
+		case X86_INST_SAR: simple = "sar"; break;
 		case X86_INST_ADD: simple = "add"; break;
 		case X86_INST_AND: simple = "and"; break;
 		case X86_INST_SUB: simple = "sub"; break;
@@ -989,6 +1143,7 @@ size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_Da
 		case X86_INST_CMP: simple = "cmp"; break;
 		case X86_INST_LEA: simple = "lea"; break;
 		case X86_INST_TEST: simple = "test"; break;
+		case X86_INST_IMUL: simple = "imul"; break;
 		
 		case X86_INST_CALL: simple = "call"; break;
 		case X86_INST_JMP: simple = "jmp"; break;
@@ -1025,6 +1180,23 @@ size_t x86_format_inst(char* out, size_t out_capacity, X86_InstType inst, X86_Da
 		case X86_INST_SETGE: simple = "setge"; break;
 		case X86_INST_SETLE: simple = "setle"; break;
 		case X86_INST_SETG: simple = "setg"; break;
+		
+		case X86_INST_CMOVO: simple = "cmovo"; break;
+		case X86_INST_CMOVNO: simple = "cmovno"; break;
+		case X86_INST_CMOVB: simple = "cmovb"; break;
+		case X86_INST_CMOVAE: simple = "cmovae"; break;
+		case X86_INST_CMOVE: simple = "cmove"; break;
+		case X86_INST_CMOVNE: simple = "cmovne"; break;
+		case X86_INST_CMOVBE: simple = "cmovbe"; break;
+		case X86_INST_CMOVA: simple = "cmova"; break;
+		case X86_INST_CMOVS: simple = "cmovs"; break;
+		case X86_INST_CMOVNS: simple = "cmovns"; break;
+		case X86_INST_CMOVP: simple = "cmovp"; break;
+		case X86_INST_CMOVNP: simple = "cmovnp"; break;
+		case X86_INST_CMOVL: simple = "cmovl"; break;
+		case X86_INST_CMOVGE: simple = "cmovge"; break;
+		case X86_INST_CMOVLE: simple = "cmovle"; break;
+		case X86_INST_CMOVG: simple = "cmovg"; break;
 		
 		case X86_INST_SSE_MOVDQU: simple = "movdqu"; break;
 		case X86_INST_SSE_MOVDQA: simple = "movdqa"; break;
