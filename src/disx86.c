@@ -630,7 +630,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			out->data_type = X86_TYPE_QWORD;
 			out->operand_count = 1;
 			out->operands[0] = (X86_Operand){
-				X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | (op - 0x50)
+				X86_OPERAND_GPR, .gpr = (rex & 1 ? 8 : 0) | (op - 0x50)
 			};
 			break;
 		}
@@ -641,7 +641,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			out->data_type = X86_TYPE_QWORD;
 			out->operand_count = 1;
 			out->operands[0] = (X86_Operand){
-				X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | (op - 0x58)
+				X86_OPERAND_GPR, .gpr = (rex & 1 ? 8 : 0) | (op - 0x58)
 			};
 			break;
 		}
