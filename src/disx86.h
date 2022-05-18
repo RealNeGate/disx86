@@ -6,144 +6,47 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef enum {
-	X86_INST_NONE,
-	
-	X86_INST_NOP,
-	X86_INST_INT,
-	X86_INST_RET,
-	X86_INST_PUSH,
-	X86_INST_POP,
-	X86_INST_MOV,
-	X86_INST_MOVSXD,
-	X86_INST_MOVZXB,
-	X86_INST_MOVZXW,
-	
-	X86_INST_SHL,
-	X86_INST_SHR,
-	X86_INST_SAR,
-	
-	X86_INST_ADD,
-	X86_INST_AND,
-	X86_INST_SUB,
-	X86_INST_SBB,
-	X86_INST_XOR,
-	X86_INST_OR,
-	X86_INST_CMP,
-	X86_INST_LEA,
-	X86_INST_TEST,
-	X86_INST_IMUL,
-	
-	X86_INST_CALL,
-	X86_INST_JMP,
-	X86_INST_JO,
-	X86_INST_JNO,
-	X86_INST_JB,
-	X86_INST_JAE,
-	X86_INST_JE,
-	X86_INST_JNE,
-	X86_INST_JBE,
-	X86_INST_JA,
-	X86_INST_JS,
-	X86_INST_JNS,
-	X86_INST_JP,
-	X86_INST_JNP,
-	X86_INST_JL,
-	X86_INST_JGE,
-	X86_INST_JLE,
-	X86_INST_JG,
-	
-	X86_INST_SETO,
-	X86_INST_SETNO,
-	X86_INST_SETB,
-	X86_INST_SETAE,
-	X86_INST_SETE,
-	X86_INST_SETNE,
-	X86_INST_SETBE,
-	X86_INST_SETA,
-	X86_INST_SETS,
-	X86_INST_SETNS,
-	X86_INST_SETP,
-	X86_INST_SETNP,
-	X86_INST_SETL,
-	X86_INST_SETGE,
-	X86_INST_SETLE,
-	X86_INST_SETG,
-	
-	X86_INST_CMOVO,
-	X86_INST_CMOVNO,
-	X86_INST_CMOVB,
-	X86_INST_CMOVAE,
-	X86_INST_CMOVE,
-	X86_INST_CMOVNE,
-	X86_INST_CMOVBE,
-	X86_INST_CMOVA,
-	X86_INST_CMOVS,
-	X86_INST_CMOVNS,
-	X86_INST_CMOVP,
-	X86_INST_CMOVNP,
-	X86_INST_CMOVL,
-	X86_INST_CMOVGE,
-	X86_INST_CMOVLE,
-	X86_INST_CMOVG,
-	
-	// integer sse
-	X86_INST_SSE_MOVDQU,  // unaligned mov integer
-	X86_INST_SSE_MOVDQA,  // aligned mov integer
-	X86_INST_SSE_MOVDQ,   // movd or movq
-	X86_INST_SSE_PADD,
-	X86_INST_SSE_PSRLD,
-	
-	// float sse
-	// these represent the different variants such as addss/addsd/addps/addpd
-	X86_INST_SSE_MOVU,  // unaligned mov float
-	X86_INST_SSE_MOVA,  // aligned mov float
-	X86_INST_SSE_ADD,
-	X86_INST_SSE_MUL,
-	X86_INST_SSE_SUB,
-	X86_INST_SSE_DIV,
-	X86_INST_SSE_CMP,
-	X86_INST_SSE_UCOMI, // there's no packed variants for this
-	X86_INST_SSE_CVT,
-	X86_INST_SSE_SQRT,
-	X86_INST_SSE_RSQRT,
-	X86_INST_SSE_AND,
-	X86_INST_SSE_OR,
-	X86_INST_SSE_XOR,
-} X86_InstType;
+#include "public.inc"
 
-typedef enum {
+typedef enum X86_DataType {
 	X86_TYPE_NONE = 0,
-	
+
 	X86_TYPE_BYTE,     // 1
 	X86_TYPE_WORD,     // 2
 	X86_TYPE_DWORD,    // 4
 	X86_TYPE_QWORD,    // 8
-	
+
 	X86_TYPE_PBYTE,   // int8 x 16 = 16
 	X86_TYPE_PWORD,   // int16 x 8 = 16
 	X86_TYPE_PDWORD,  // int32 x 4 = 16
 	X86_TYPE_PQWORD,  // int64 x 2 = 16
-	
+
 	X86_TYPE_SSE_SS,  // float32 x 1 = 4
 	X86_TYPE_SSE_SD,  // float64 x 1 = 8
 	X86_TYPE_SSE_PS,  // float32 x 4 = 16
 	X86_TYPE_SSE_PD,   // float64 x 2 = 16
-	
+
 	X86_TYPE_XMMWORD, // the generic idea of them
 } X86_DataType;
 
-typedef enum {
-	X86_RAX, X86_RCX, X86_RDX, X86_RBX, X86_RSP, X86_RBP, X86_RSI, X86_RDI,
+typedef enum X86_GPR {
+	// this is used for DWORD or QWORD operand types
+	X86_RAX = 0, X86_RCX, X86_RDX, X86_RBX, X86_RSP, X86_RBP, X86_RSI, X86_RDI,
 	X86_R8, X86_R9, X86_R10, X86_R11, X86_R12, X86_R13, X86_R14, X86_R15,
-    
+
+	// when using BYTE as the operand type, these are used instead
+	X86_AL = 0, X86_CL, X86_DL, X86_BL, X86_AH, X86_CH, X86_DH, X86_BH,
+
+	// when using WORD as the operand type
+	X86_AX = 0, X86_CX, X86_DX, X86_BX, X86_SP, X86_BP, X86_SI, X86_DI,
+
     X86_GPR_NONE = -1
 } X86_GPR;
 
-typedef enum {
-	X86_XMM0, X86_XMM1, X86_XMM2, X86_XMM3, X86_XMM4, X86_XMM5, X86_XMM6, X86_XMM7,  
+typedef enum X86_XMM {
+	X86_XMM0, X86_XMM1, X86_XMM2,  X86_XMM3,  X86_XMM4,  X86_XMM5,  X86_XMM6,  X86_XMM7,
     X86_XMM8, X86_XMM9, X86_XMM10, X86_XMM11, X86_XMM12, X86_XMM13, X86_XMM14, X86_XMM15,
-	
+
 	X86_XMM_NONE = -1
 } X86_XMM;
 
@@ -154,22 +57,22 @@ typedef enum X86_Cond {
 
 typedef enum X86_Segment {
 	X86_SEGMENT_DEFAULT = 0,
-	
+
 	X86_SEGMENT_ES, X86_SEGMENT_CS,
 	X86_SEGMENT_SS, X86_SEGMENT_DS,
 	X86_SEGMENT_GS, X86_SEGMENT_FS,
 } X86_Segment;
 
-typedef enum {
+typedef enum X86_Scale {
 	X86_SCALE_X1,
 	X86_SCALE_X2,
 	X86_SCALE_X4,
 	X86_SCALE_X8
 } X86_Scale;
 
-typedef enum {
+typedef enum X86_OperandType {
 	X86_OPERAND_NONE = 0,
-	
+
 	X86_OPERAND_GPR,   // rax rcx rdx
 	X86_OPERAND_XMM,   // xmmN
 	X86_OPERAND_MEM,   // [base + index * scale + disp]
@@ -206,17 +109,18 @@ typedef struct {
 } X86_Buffer;
 
 typedef struct {
-	X86_InstType type      : 8;
+	X86_InstType type;
+
 	X86_DataType data_type : 8;
 	X86_Segment  segment   : 8;
 	int operand_count      : 8;
-	
+
 	X86_Operand operands[4];
 } X86_Inst;
 
 typedef enum {
 	X86_RESULT_SUCCESS = 0,
-	
+
 	X86_RESULT_OUT_OF_SPACE,
 	X86_RESULT_UNKNOWN_OPCODE,
 	X86_RESULT_INVALID_RX
@@ -227,6 +131,7 @@ typedef struct {
 	int instruction_length;
 } X86_Result;
 
+void x86_print_dfa_DEBUG(void);
 X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out);
 X86_Buffer x86_advance(X86_Buffer in, size_t amount);
 

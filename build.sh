@@ -1,0 +1,1 @@
+gcc src/main.c src/disx86.c -g -o build/disx86

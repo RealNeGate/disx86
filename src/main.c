@@ -1,5 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <string.h>
+#include <stdint.h>
+#include <assert.h>
 #include "disx86.h"
 
 typedef struct COFF_SectionHeader {
@@ -32,29 +34,31 @@ static_assert(sizeof(COFF_FileHeader) == 20, "COFF File header size != 20 bytes"
 
 int main(int argc, char* argv[]) {
 	setvbuf(stdout, NULL, _IONBF, 0);
-	
-	if (argc < 1) {
-		printf("error: no input file!\n");
+
+	if (argc <= 1) {
+		x86_print_dfa_DEBUG();
+
+		fprintf(stderr, "error: no input file!\n");
 		return 1;
 	}
-	
-	printf("Opening %s...\n", argv[1]);
-	
+
+	fprintf(stderr, "info: opening %s...\n", argv[1]);
+
 	// Read sum bites
 	FILE* file = fopen(argv[1], "rb");
 	if (file == NULL) {
-		printf("could not open file!\n");
+		fprintf(stderr, "error: could not open file!\n");
 		return 1;
 	}
-	
+
 	fseek(file, 0, SEEK_END);
 	size_t length = ftell(file);
 	rewind(file);
-	
+
 	char* buffer = malloc(length * sizeof(char));
 	fread(buffer, length, sizeof(char), file);
 	fclose(file);
-	
+
 	// Locate .text section
 	// TODO(NeGate): this isn't properly checked for endianness... i dont care
 	// here...
@@ -63,8 +67,8 @@ int main(int argc, char* argv[]) {
 	for (size_t i = 0; i < file_header->num_sections; i++) {
 		size_t section_offset = sizeof(COFF_FileHeader) + (i * sizeof(COFF_SectionHeader));
 		COFF_SectionHeader* sec = ((COFF_SectionHeader*) &buffer[section_offset]);
-		
-		// not very robust because it assumes that the compiler didn't 
+
+		// not very robust because it assumes that the compiler didn't
 		// put .text name into a text section and instead did it inplace
 		if (strcmp(sec->name, ".text") == 0 ||
 			strcmp(sec->name, ".text$mn") == 0) {
@@ -72,20 +76,20 @@ int main(int argc, char* argv[]) {
 			break;
 		}
 	}
-	
+
 	if (text_section == NULL) {
-		printf("Could not locate .text section\n");
+		fprintf(stderr, "error: could not locate .text section\n");
 		abort();
 	}
-	
+
 	const uint8_t* text_section_start = (uint8_t*) &buffer[text_section->raw_data_pos];
-	
-	X86_Buffer input = { 
+
+	X86_Buffer input = {
 		text_section_start,
 		text_section->raw_data_size
 	};
-	
-	printf("Disassembling %zu bytes...\n", input.length);
+
+	fprintf(stderr, "error: disassembling %zu bytes...\n", input.length);
 	while (input.length > 0) {
 		X86_Inst inst;
 		X86_Result result = x86_disasm(input, &inst);
@@ -93,38 +97,36 @@ int main(int argc, char* argv[]) {
 			printf("disassembler error: %s (%x)\n", x86_get_result_string(result.code), input.data[result.instruction_length-1]);
 			abort();
 		}
-		
+
 		// Print the address
-		printf("    %016llx: ", input.data - text_section_start);
-		
+		printf("    %016llX: ", (long long)(input.data - text_section_start));
+
 		// Print code bytes
 		for (int j = 0; j < 6 && j < result.instruction_length; j++) {
-			printf("%02x ", input.data[j]);
+			printf("%02X ", input.data[j]);
 		}
-		
-		int remaining = result.instruction_length > 6 
-			? 0 : 6 - result.instruction_length;
-		
+
+		int remaining = result.instruction_length > 6 ? 0 : 6 - result.instruction_length;
 		while (remaining--) printf("   ");
-		
+
 		// Print some instruction
 		char tmp[32];
 		x86_format_inst(tmp, sizeof(tmp), inst.type, inst.data_type);
-		printf("%s\t", tmp);
-		
+		printf("%-12s", tmp);
+
 		for (int j = 0; j < inst.operand_count; j++) {
 			if (j) printf(",");
-			
+
 			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
 			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
 				int64_t base_address = (input.data - text_section_start)
 					+ result.instruction_length;
-				
-				printf("%llx", base_address + inst.operands[j].offset);
+
+				printf("%016llX", (long long)(base_address + inst.operands[j].offset));
 			} else if (inst.operands[j].type == X86_OPERAND_RIP ||
 					   inst.operands[j].type == X86_OPERAND_MEM) {
 				printf("%s ptr ", x86_get_data_type_string(inst.data_type));
-				
+
 				if (inst.segment != X86_SEGMENT_DEFAULT) {
 					printf("%s:%s", x86_get_segment_string(inst.segment), tmp);
 				} else {
@@ -134,28 +136,28 @@ int main(int argc, char* argv[]) {
 				printf("%s", tmp);
 			}
 		}
-		
+
 		printf("\n");
-		
+
 		if (result.instruction_length > 6) {
 			printf("                      ");
-			
+
 			size_t j = 6;
 			while (j < result.instruction_length) {
-				printf("%02x ", input.data[j]);
-				
+				printf("%02X ", input.data[j]);
+
 				if (j && j % 6 == 5) {
 					printf("\n");
 					printf("                      ");
 				}
 				j++;
 			}
-			
+
 			printf("\n");
 		}
-		
+
 		input = x86_advance(input, result.instruction_length);
 	}
-	
+
 	return 0;
 }
