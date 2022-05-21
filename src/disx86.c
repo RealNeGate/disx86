@@ -3,7 +3,6 @@
 
 typedef struct {
 	const char* name;
-	int rx;
 } InstructionDesc;
 
 #include "table.inc"
@@ -230,22 +229,6 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	out->type = (val & 0xFFFF);
 	switch (encoding_mode) {
 		case X86_ENCODE_void: break;
-		case X86_ENCODE_reg64_imm: {
-			uint8_t mod_rx_rm = x86__read_uint8(&in);
-			uint8_t mod, rx, rm;
-			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
-
-			out->operand_count = 2;
-			out->operands[0] = (X86_Operand){
-				X86_OPERAND_XMM, .xmm = (rex & 1 ? 8 : 0) | rm
-			};
-
-			uint64_t imm = x86__read_uint64(&in);
-			out->operands[1] = (X86_Operand){
-				X86_OPERAND_ABS64, .abs64 = imm
-			};
-			break;
-		}
 		case X86_ENCODE_xmmreg_imm: {
 			uint8_t mod_rx_rm = x86__read_uint8(&in);
 			uint8_t mod, rx, rm;
@@ -449,6 +432,33 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			out->operands[1] = (X86_Operand){
 				X86_OPERAND_IMM, .imm = imm
 			};
+			break;
+		}
+		case X86_ENCODE_reg16_imm:
+		case X86_ENCODE_reg32_imm:
+		case X86_ENCODE_reg64_imm: {
+			out->operand_count = 2;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .xmm = (rex & 4 ? 8 : 0) | (op & 0x7)
+			};
+
+			// classify type
+			uint64_t imm = 0;
+			if (encoding_mode == X86_ENCODE_reg64_imm) {
+				imm = x86__read_uint64(&in);
+				out->data_type = X86_TYPE_QWORD;
+			} else if (encoding_mode == X86_ENCODE_reg32_imm) {
+				imm = x86__read_uint32(&in);
+				out->data_type = X86_TYPE_DWORD;
+			} else if (encoding_mode == X86_ENCODE_reg16_imm) {
+				imm = x86__read_uint16(&in);
+				out->data_type = X86_TYPE_WORD;
+			} else {
+				imm = x86__read_uint8(&in);
+				out->data_type = X86_TYPE_BYTE;
+			}
+
+			out->operands[1] = (X86_Operand){ X86_OPERAND_ABS64, .abs64 = imm };
 			break;
 		}
 		case X86_ENCODE_rm16:

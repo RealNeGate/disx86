@@ -32,62 +32,8 @@ typedef struct COFF_FileHeader {
 } COFF_FileHeader;
 static_assert(sizeof(COFF_FileHeader) == 20, "COFF File header size != 20 bytes");
 
-int main(int argc, char* argv[]) {
-	setvbuf(stdout, NULL, _IONBF, 0);
-
-	if (argc <= 1) {
-		x86_print_dfa_DEBUG();
-
-		fprintf(stderr, "error: no input file!\n");
-		return 1;
-	}
-
-	fprintf(stderr, "info: opening %s...\n", argv[1]);
-
-	// Read sum bites
-	FILE* file = fopen(argv[1], "rb");
-	if (file == NULL) {
-		fprintf(stderr, "error: could not open file!\n");
-		return 1;
-	}
-
-	fseek(file, 0, SEEK_END);
-	size_t length = ftell(file);
-	rewind(file);
-
-	char* buffer = malloc(length * sizeof(char));
-	fread(buffer, length, sizeof(char), file);
-	fclose(file);
-
-	// Locate .text section
-	// TODO(NeGate): this isn't properly checked for endianness... i dont care
-	// here...
-	COFF_FileHeader* file_header = ((COFF_FileHeader*) buffer);
-	COFF_SectionHeader* text_section = NULL;
-	for (size_t i = 0; i < file_header->num_sections; i++) {
-		size_t section_offset = sizeof(COFF_FileHeader) + (i * sizeof(COFF_SectionHeader));
-		COFF_SectionHeader* sec = ((COFF_SectionHeader*) &buffer[section_offset]);
-
-		// not very robust because it assumes that the compiler didn't
-		// put .text name into a text section and instead did it inplace
-		if (strcmp(sec->name, ".text") == 0 ||
-			strcmp(sec->name, ".text$mn") == 0) {
-			text_section = sec;
-			break;
-		}
-	}
-
-	if (text_section == NULL) {
-		fprintf(stderr, "error: could not locate .text section\n");
-		abort();
-	}
-
-	const uint8_t* text_section_start = (uint8_t*) &buffer[text_section->raw_data_pos];
-
-	X86_Buffer input = {
-		text_section_start,
-		text_section->raw_data_size
-	};
+static void dissassemble_crap(X86_Buffer input) {
+	const uint8_t* start = input.data;
 
 	fprintf(stderr, "error: disassembling %zu bytes...\n", input.length);
 	while (input.length > 0) {
@@ -99,7 +45,7 @@ int main(int argc, char* argv[]) {
 		}
 
 		// Print the address
-		printf("    %016llX: ", (long long)(input.data - text_section_start));
+		printf("    %016llX: ", (long long)(input.data - start));
 
 		// Print code bytes
 		for (int j = 0; j < 6 && j < result.instruction_length; j++) {
@@ -119,7 +65,7 @@ int main(int argc, char* argv[]) {
 
 			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
 			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
-				int64_t base_address = (input.data - text_section_start)
+				int64_t base_address = (input.data - start)
 					+ result.instruction_length;
 
 				printf("%016llX", (long long)(base_address + inst.operands[j].offset));
@@ -157,6 +103,81 @@ int main(int argc, char* argv[]) {
 		}
 
 		input = x86_advance(input, result.instruction_length);
+	}
+}
+
+int main(int argc, char* argv[]) {
+	setvbuf(stdout, NULL, _IONBF, 0);
+
+	if (argc <= 1) {
+		x86_print_dfa_DEBUG();
+
+		fprintf(stderr, "error: no input file!\n");
+		return 1;
+	}
+
+	bool is_binary = false;
+	const char* source_file = NULL;
+	for (int i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "-b") == 0) is_binary = true;
+		else {
+			if (source_file != NULL) {
+				fprintf(stderr, "error: can't hecking open multiple files!\n");
+				return 1;
+			}
+
+			source_file = argv[i];
+		}
+	}
+
+	fprintf(stderr, "info: opening %s...\n", source_file);
+
+	// Read sum bites
+	FILE* file = fopen(source_file, "rb");
+	if (file == NULL) {
+		fprintf(stderr, "error: could not open file!\n");
+		return 1;
+	}
+
+	fseek(file, 0, SEEK_END);
+	size_t length = ftell(file);
+	rewind(file);
+
+	char* buffer = malloc(length * sizeof(char));
+	fread(buffer, length, sizeof(char), file);
+	fclose(file);
+
+	if (is_binary) {
+		dissassemble_crap((X86_Buffer){ (uint8_t*)buffer, length });
+	} else {
+		// Locate .text section
+		// TODO(NeGate): this isn't properly checked for endianness... i dont care
+		// here...
+		COFF_FileHeader* file_header = ((COFF_FileHeader*) buffer);
+		COFF_SectionHeader* text_section = NULL;
+		for (size_t i = 0; i < file_header->num_sections; i++) {
+			size_t section_offset = sizeof(COFF_FileHeader) + (i * sizeof(COFF_SectionHeader));
+			COFF_SectionHeader* sec = ((COFF_SectionHeader*) &buffer[section_offset]);
+
+			// not very robust because it assumes that the compiler didn't
+			// put .text name into a text section and instead did it inplace
+			if (strcmp(sec->name, ".text") == 0 ||
+				strcmp(sec->name, ".text$mn") == 0) {
+				text_section = sec;
+				break;
+			}
+		}
+
+		if (text_section == NULL) {
+			fprintf(stderr, "error: could not locate .text section\n");
+			abort();
+		}
+
+		const uint8_t* text_section_start = (uint8_t*) &buffer[text_section->raw_data_pos];
+		dissassemble_crap((X86_Buffer){
+							  text_section_start,
+							  text_section->raw_data_size
+						  });
 	}
 
 	return 0;
