@@ -1,4 +1,8 @@
-call "W:\Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
+call vcvars64
 
-clang -march=nehalem -g -gcodeview -O0 -Werror -Wall -Wno-unused-function src/main.c src/disx86.c -o build/test.exe
+mkdir build
+clang -g -gcodeview -Werror -Wall -Wno-unused-function -D_CRT_SECURE_NO_WARNINGS src/main.c src/disx86.c -o build/test.exe
+clang -g -gcodeview -Werror -Wall -Wno-unused-function -D_CRT_SECURE_NO_WARNINGS src/hexbin.c -o build/hexbin.exe
+build\hexbin.exe tests/bintest.txt build/bintest.bin
+
 rem cl src/main.c src/disx86.c /MT /Zi /Fe:build\test.exe
