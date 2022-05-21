@@ -1,7 +1,5 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -14,24 +12,25 @@ typedef struct {
 Slice parse_file(char *filepath) {
 	Slice fi = {};
 
-	int fd = open(filepath, O_RDONLY);
-	if (fd < 0) {
+	FILE *file = fopen(filepath, "r");
+	if (!file) {
 		printf("Unable to find %s\n", filepath);
 		return fi;
 	}
 
-	int64_t length = lseek(fd, 0, SEEK_END);
-	lseek(fd, 0, SEEK_SET);
+	fseek(file, 0, SEEK_END);
+	int64_t length = ftell(file);
+	fseek(file, 0, SEEK_SET);
 
 	uint8_t *binary = (uint8_t *)malloc(length + 1);
-	int64_t ret = read(fd, binary, length);
+	int64_t ret = fread(binary, 1, length, file);
 	if (length != ret) {
 		free(binary);
-		printf("Failed to read!\n");
+		printf("Failed to open %s!\n", filepath);
 		return fi;
 	}
 	binary[length] = 0;
-	close(fd);
+	fclose(file);
 
 	fi.data = binary;
 	fi.length = length;
@@ -49,9 +48,9 @@ int main(int argc, char **argv) {
 		printf("Failed to load %s\n", argv[1]);
 		return 1;
 	}
-	int out_file = open(argv[2], O_RDWR | O_CREAT, 0644);
-	if (errno) {
-		printf("%s: %s\n", strerror(errno), argv[2]);
+	FILE *out_file = fopen(argv[2], "w+");
+	if (!out_file) {
+		printf("failed to open %s\n", argv[2]);
 		return 1;
 	}
 
@@ -75,12 +74,12 @@ int main(int argc, char **argv) {
 
 		uint8_t buffer[1];
 		buffer[0] = (uint8_t)ret;
-		int len = write(out_file, buffer, 1);
+		int len = fwrite(buffer, 1, 1, out_file);
 		if (!len) {
 			printf("wat!\n");
 			return 1;
 		}
 	}
 
-	close(out_file);
+	fclose(out_file);
 }
