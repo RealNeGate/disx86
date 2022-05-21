@@ -3,6 +3,10 @@
 
 typedef struct {
 	const char* name;
+
+	// if the instruction has a condition code, it's
+	// found in the bottom 4bits of the opcode
+	bool has_cc;
 } InstructionDesc;
 
 #include "table.inc"
@@ -137,6 +141,10 @@ static void dump(int start, int depth) {
 	for (int i = 0; i < 256; i++) if (dfa[start+i] != 0) {
 		for (int j = 0; j < depth; j++) printf("  ");
 		printf("0x%02x", i);
+		if (dfa[start+i] & 0x40000000) {
+			printf(" +R");
+		}
+
 		if (dfa[start+i] & 0x10000000) {
 			printf(" RX");
 		}
@@ -144,6 +152,8 @@ static void dump(int start, int depth) {
 		if ((dfa[start+i] & 0x20000000) == 0) {
 			printf("\n");
 			dump(dfa[start+i] & 0xFFFF, depth+1);
+		} else if (descs[dfa[start+i] & 0xFFFF].has_cc) {
+			printf(" %s\n", descs[(dfa[start+i] & 0xFFFF) + i].name);
 		} else {
 			printf(" %s\n", descs[dfa[start+i] & 0xFFFF].name);
 		}
@@ -192,13 +202,21 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	// if you use the F2 or F3 prefixes then we'll start the DFA at those bytes
 	int val = DFA_ENTRYPOINT;
-	if (addr16)  val = dfa[val + 0x66];
+	if (addr16)  {
+		val = dfa[val + 0x66];
+
+		// if there's no match then we'll just neglect the 66h prefix
+		if (dfa[val + op] == 0) val = DFA_ENTRYPOINT;
+	}
 	if (rex & 8) val = dfa[val + 0x48];
 	if (rep)     val = dfa[val + 0xF3];
 	if (repne)   val = dfa[val + 0xF2];
 
+	// +r means that the bottom 8bits of the opcode encode a register
+	bool is_plus_r = false;
 	while (true) {
 		val = dfa[val + op];
+		if (val & 0x40000000) is_plus_r = true;
 
 		// error state
 		if (val == 0) {
@@ -227,6 +245,10 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
     const InstructionDesc* desc = &descs[val & 0xFFFF];
 
 	out->type = (val & 0xFFFF);
+	if (desc->has_cc) {
+		out->type += (op & 0xF);
+	}
+
 	switch (encoding_mode) {
 		case X86_ENCODE_void: break;
 		case X86_ENCODE_xmmreg_imm: {
@@ -322,18 +344,39 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 		case X86_ENCODE_imm_short:
-		case X86_ENCODE_imm32_near: {
-			out->type += (op & 0xF);
+		case X86_ENCODE_imm32_near:
+		case X86_ENCODE_imm64_near: {
 			out->data_type = X86_TYPE_NONE;
 
 			int32_t offset;
-			if (encoding_mode == X86_ENCODE_imm32_near) offset = x86__read_uint32(&in);
+			if (encoding_mode == X86_ENCODE_imm64_near) offset = x86__read_uint32(&in);
+			else if (encoding_mode == X86_ENCODE_imm32_near) offset = x86__read_uint32(&in);
 			else offset = (int8_t)x86__read_uint8(&in);
 
 			out->operand_count = 1;
 			out->operands[0] = (X86_Operand){
 				X86_OPERAND_OFFSET, .offset = offset
 			};
+			break;
+		}
+		case X86_ENCODE_reg8:
+		case X86_ENCODE_reg16:
+		case X86_ENCODE_reg32:
+		case X86_ENCODE_reg64: {
+			out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
+
+			if (is_plus_r) {
+				out->operand_count = 1;
+				out->operands[0] = (X86_Operand){ X86_OPERAND_GPR, .gpr = (rex & 1 ? 8 : 0) | (op & 0x7) };
+			} else {
+				uint8_t mod_rx_rm = x86__read_uint8(&in);
+
+				uint8_t mod, rx, rm;
+				DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+
+				out->operand_count = 1;
+				out->operands[0] = (X86_Operand){ X86_OPERAND_GPR, .gpr = (rex & 4 ? 8 : 0) | rx };
+			}
 			break;
 		}
 		case X86_ENCODE_reg32_reg32:
@@ -357,8 +400,10 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm32_reg32:
 		case X86_ENCODE_reg32_rm32:
 		case X86_ENCODE_rm64_reg64:
+		case X86_ENCODE_reg64_rm32:
 		case X86_ENCODE_reg64_rm64: {
 			bool direction = (encoding_mode == X86_ENCODE_reg64_rm64 ||
+							  encoding_mode == X86_ENCODE_reg64_rm32 ||
 							  encoding_mode == X86_ENCODE_reg32_rm32 ||
 							  encoding_mode == X86_ENCODE_reg16_rm16 ||
 							  encoding_mode == X86_ENCODE_reg8_rm8);
@@ -389,9 +434,13 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			}
 			break;
 		}
+		case X86_ENCODE_reg8_mem:
+		case X86_ENCODE_reg16_mem:
 		case X86_ENCODE_reg32_mem:
 		case X86_ENCODE_reg64_mem: {
-			out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
+			if (encoding_mode == X86_ENCODE_reg8) out->data_type = X86_TYPE_BYTE;
+			else if (encoding_mode == X86_ENCODE_reg16) out->data_type = X86_TYPE_WORD;
+			else out->data_type = (rex & 8) ? X86_TYPE_QWORD : X86_TYPE_DWORD;
 
 			uint8_t mod_rx_rm = x86__read_uint8(&in);
 			uint8_t mod, rx, rm;
@@ -408,6 +457,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			}
 			break;
 		}
+		case X86_ENCODE_mem_imm8:
 		case X86_ENCODE_rm16_imm8:
 		case X86_ENCODE_rm32_imm8:
 		case X86_ENCODE_rm64_imm8: {
@@ -434,12 +484,69 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			};
 			break;
 		}
+		case X86_ENCODE_mem_imm32:
+		case X86_ENCODE_rm32_imm32:
+		case X86_ENCODE_rm64_imm32: {
+			// classify type
+			if (encoding_mode == X86_ENCODE_rm64_imm32) out->data_type = X86_TYPE_QWORD;
+			else out->data_type = X86_TYPE_DWORD;
+
+			uint8_t mod_rx_rm = x86__read_uint8(&in);
+
+			uint8_t mod, rx, rm;
+			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+
+			out->operand_count = 2;
+			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+				code = X86_RESULT_OUT_OF_SPACE;
+				goto done;
+			}
+
+			int32_t imm = x86__read_uint32(&in);
+			out->operands[1] = (X86_Operand){
+				X86_OPERAND_IMM, .imm = imm
+			};
+			break;
+		}
+		case X86_ENCODE_rm16_imm:
+		case X86_ENCODE_rm32_imm:
+		case X86_ENCODE_rm64_imm: {
+			uint8_t mod_rx_rm = x86__read_uint8(&in);
+
+			uint8_t mod, rx, rm;
+			DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
+
+			out->operand_count = 2;
+			if (!x86_parse_memory_op(&in, &out->operands[0], mod, rm, rex)) {
+				code = X86_RESULT_OUT_OF_SPACE;
+				goto done;
+			}
+
+			// classify type
+			uint64_t imm = 0;
+			if (encoding_mode == X86_ENCODE_rm64_imm) {
+				imm = (int64_t) ((int32_t)x86__read_uint32(&in));
+				out->data_type = X86_TYPE_QWORD;
+			} else if (encoding_mode == X86_ENCODE_rm32_imm) {
+				imm = x86__read_uint32(&in);
+				out->data_type = X86_TYPE_DWORD;
+			} else if (encoding_mode == X86_ENCODE_rm16_imm) {
+				imm = x86__read_uint16(&in);
+				out->data_type = X86_TYPE_WORD;
+			} else {
+				imm = x86__read_uint8(&in);
+				out->data_type = X86_TYPE_BYTE;
+			}
+
+			out->operands[1] = (X86_Operand){ X86_OPERAND_ABS64, .abs64 = imm };
+			break;
+		}
 		case X86_ENCODE_reg16_imm:
 		case X86_ENCODE_reg32_imm:
 		case X86_ENCODE_reg64_imm: {
 			out->operand_count = 2;
 			out->operands[0] = (X86_Operand){
-				X86_OPERAND_GPR, .xmm = (rex & 4 ? 8 : 0) | (op & 0x7)
+				X86_OPERAND_GPR, .xmm = (rex & 1 ? 8 : 0) | (op & 0x7)
 			};
 
 			// classify type

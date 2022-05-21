@@ -40,7 +40,13 @@ static void dissassemble_crap(X86_Buffer input) {
 		X86_Inst inst;
 		X86_Result result = x86_disasm(input, &inst);
 		if (result.code != X86_RESULT_SUCCESS) {
-			printf("disassembler error: %s (%x)\n", x86_get_result_string(result.code), input.data[result.instruction_length-1]);
+			printf("disassembler error: %s (", x86_get_result_string(result.code));
+			for (int i = 0; i < result.instruction_length; i++) {
+				if (i) printf(" ");
+				printf("%x", input.data[i]);
+			}
+			printf(")\n");
+
 			abort();
 		}
 
