@@ -45,6 +45,10 @@ int main(int argc, char **argv) {
 	}
 
 	Slice in_file = parse_file(argv[1]);
+	if (!in_file.data) {
+		printf("Failed to load %s\n", argv[1]);
+		return 1;
+	}
 	int out_file = open(argv[2], O_RDWR | O_CREAT, 0644);
 	if (errno) {
 		printf("%s: %s\n", strerror(errno), argv[2]);
@@ -59,7 +63,7 @@ int main(int argc, char **argv) {
 		long ret = strtol(head, &tail, 16);
 		if (!ret && errno) {
 			printf("Failed to parse near %.*s | %s\n", 4, head, strerror(errno));
-			return 2;
+			return 1;
 		}
 
 		// This kills the loop when there's nothing left to read
@@ -74,7 +78,7 @@ int main(int argc, char **argv) {
 		int len = write(out_file, buffer, 1);
 		if (!len) {
 			printf("wat!\n");
-			return 3;
+			return 1;
 		}
 	}
 
