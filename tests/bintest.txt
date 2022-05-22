@@ -1,2 +1,6 @@
+// endbr64
+f3 0f 1e fa
+
+// fuck shit
 c4 e2 61 bc e9
 c4 e2 79 18 c0

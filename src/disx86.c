@@ -1,4 +1,5 @@
 #include "disx86.h"
+#include <string.h>
 #include <assert.h>
 
 typedef struct {
@@ -172,6 +173,13 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	out->data_type = X86_TYPE_NONE;
 	out->segment = X86_SEGMENT_DEFAULT;
 	out->operand_count = 0;
+
+	if (in.length >= 4 &&
+		memcmp(in.data, (uint8_t[]) { 0xF3, 0x0F, 0x1E, 0xFA }, 4) == 0) {
+		// endbr64 hack
+		out->type = X86_INST_ENDBR64;
+		return (X86_Result){ X86_RESULT_SUCCESS, 4 };
+	}
 
 	const uint8_t* start = in.data;
 	uint8_t rex = 0;     // 0x4X
