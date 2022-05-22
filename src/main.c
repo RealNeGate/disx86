@@ -40,7 +40,7 @@ static void dissassemble_crap(X86_Buffer input) {
 		X86_ResultCode result = x86_disasm(input, &inst);
 		if (result != X86_RESULT_SUCCESS) {
 			printf("disassembler error: %s (", x86_get_result_string(result));
-			for (int i = 0; i < inst.instruction_length; i++) {
+			for (int i = 0; i < inst.length; i++) {
 				if (i) printf(" ");
 				printf("%x", input.data[i]);
 			}
@@ -53,11 +53,11 @@ static void dissassemble_crap(X86_Buffer input) {
 		printf("    %016llX: ", (long long)(input.data - start));
 
 		// Print code bytes
-		for (int j = 0; j < 6 && j < inst.instruction_length; j++) {
+		for (int j = 0; j < 6 && j < inst.length; j++) {
 			printf("%02X ", input.data[j]);
 		}
 
-		int remaining = inst.instruction_length > 6 ? 0 : 6 - inst.instruction_length;
+		int remaining = inst.length > 6 ? 0 : 6 - inst.length;
 		while (remaining--) printf("   ");
 
 		// Print some instruction
@@ -71,7 +71,7 @@ static void dissassemble_crap(X86_Buffer input) {
 			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
 			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
 				int64_t base_address = (input.data - start)
-					+ inst.instruction_length;
+					+ inst.length;
 
 				printf("%016llX", (long long)(base_address + inst.operands[j].offset));
 			} else if (inst.operands[j].type == X86_OPERAND_RIP ||
@@ -90,11 +90,11 @@ static void dissassemble_crap(X86_Buffer input) {
 
 		printf("\n");
 
-		if (inst.instruction_length > 6) {
+		if (inst.length > 6) {
 			printf("                      ");
 
 			size_t j = 6;
-			while (j < inst.instruction_length) {
+			while (j < inst.length) {
 				printf("%02X ", input.data[j]);
 
 				if (j && j % 6 == 5) {
@@ -107,7 +107,7 @@ static void dissassemble_crap(X86_Buffer input) {
 			printf("\n");
 		}
 
-		input = x86_advance(input, inst.instruction_length);
+		input = x86_advance(input, inst.length);
 	}
 }
 

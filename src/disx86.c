@@ -170,7 +170,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	// of operand storage... it's not actually that big but
 	// eh
 	out->type = X86_INST_NONE;
-	out->instruction_length = 0;
+	out->length = 0;
 	out->data_type = X86_TYPE_NONE;
 	out->segment = X86_SEGMENT_DEFAULT;
 	out->operand_count = 0;
@@ -179,7 +179,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		memcmp(in.data, (uint8_t[]) { 0xF3, 0x0F, 0x1E, 0xFA }, 4) == 0) {
 		// endbr64 hack
 		out->type = X86_INST_ENDBR64;
-		out->instruction_length = 4;
+		out->length = 4;
 		return X86_RESULT_SUCCESS;
 	}
 
@@ -607,11 +607,8 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		}
 	}
 
-	((void)encoding_mode);
-	((void)desc);
-
 	done:
-	out->instruction_length = (in.data - start);
+	out->length = (in.data - start);
 	return code;
 }
 

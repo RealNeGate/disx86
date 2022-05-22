@@ -110,7 +110,8 @@ typedef struct {
 
 typedef struct {
 	X86_InstType type;
-	int instruction_length;
+	int length;
+	
 	X86_DataType data_type : 8;
 	X86_Segment  segment   : 8;
 	int operand_count      : 8;
