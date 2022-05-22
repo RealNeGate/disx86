@@ -110,7 +110,7 @@ typedef struct {
 
 typedef struct {
 	X86_InstType type;
-
+	int instruction_length;
 	X86_DataType data_type : 8;
 	X86_Segment  segment   : 8;
 	int operand_count      : 8;
@@ -126,13 +126,8 @@ typedef enum {
 	X86_RESULT_INVALID_RX
 } X86_ResultCode;
 
-typedef struct {
-	X86_ResultCode code;
-	int instruction_length;
-} X86_Result;
-
 void x86_print_dfa_DEBUG(void);
-X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out);
+X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out);
 X86_Buffer x86_advance(X86_Buffer in, size_t amount);
 
 // Pretty formats

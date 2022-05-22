@@ -165,11 +165,12 @@ void x86_print_dfa_DEBUG(void) {
 	dump(DFA_ENTRYPOINT, 0);
 }
 
-X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
+X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	// clear out the stuff without clearing the giant chunk
 	// of operand storage... it's not actually that big but
 	// eh
 	out->type = X86_INST_NONE;
+	out->instruction_length = 0;
 	out->data_type = X86_TYPE_NONE;
 	out->segment = X86_SEGMENT_DEFAULT;
 	out->operand_count = 0;
@@ -178,11 +179,13 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		memcmp(in.data, (uint8_t[]) { 0xF3, 0x0F, 0x1E, 0xFA }, 4) == 0) {
 		// endbr64 hack
 		out->type = X86_INST_ENDBR64;
-		return (X86_Result){ X86_RESULT_SUCCESS, 4 };
+		out->instruction_length = 4;
+		return X86_RESULT_SUCCESS;
 	}
 
 	const uint8_t* start = in.data;
 	uint8_t rex = 0;     // 0x4X
+	bool addr32 = false; // 0x67
 	bool addr16 = false; // 0x66
 	bool rep    = false; // 0xF3 these are both used
 	bool repne  = false; // 0xF2 to define SSE types
@@ -194,6 +197,7 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 		if ((op & 0xF0) == 0x40) rex = op;
 		else if (op == 0x66) addr16 = true;
+		else if (op == 0x67) addr32 = true;
 		else if (op == 0xF3) rep = true;
 		else if (op == 0xF2) repne = true;
 		else if (op == 0x2E) out->segment = X86_SEGMENT_CS;
@@ -607,7 +611,8 @@ X86_Result x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	((void)desc);
 
 	done:
-	return (X86_Result){ code, in.data - start };
+	out->instruction_length = (in.data - start);
+	return code;
 }
 
 #if 0
