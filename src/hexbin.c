@@ -98,16 +98,24 @@ int main(int argc, char **argv) {
 		if ((in_file.data + i)[0] == '\0') {
 			break;
 		}
-		
-		char *head = (char *)(in_file.data + i);
-		char *tail;
-		long ret = strtol(head, &tail, 16);
-		if (!ret && errno) {
-			printf("Failed to parse near %.*s | %s\n", 4, head, strerror(errno));
-			return 1;
-		}
 
-		int skip = tail - head;
+		char *head = (char *)(in_file.data + i);
+
+		int skip;
+		long ret;
+		if (strncmp(head, "00", 2) == 0) {
+			ret = 0;
+			skip = 2;
+		} else {
+			char *tail;
+			ret = strtol(head, &tail, 16);
+			if (!ret && errno) {
+				printf("Failed to parse near %.*s | %s\n", 4, head, strerror(errno));
+				return 1;
+			}
+
+			skip = tail - head;
+		}
 		i += skip;
 
 		if (!skip) {

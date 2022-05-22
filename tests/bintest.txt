@@ -1,6 +1,9 @@
 // endbr64
 f3 0f 1e fa
 
+// cmp eax,0xfffff000
+3d 00 f0 ff ff
+
 // fuck shit
 c4 e2 61 bc e9
 c4 e2 79 18 c0

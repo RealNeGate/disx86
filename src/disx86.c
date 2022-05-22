@@ -263,6 +263,62 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	switch (encoding_mode) {
 		case X86_ENCODE_void: break;
+		case X86_ENCODE_reg_al_imm: {
+			out->data_type = X86_TYPE_BYTE;
+
+			out->operand_count = 2;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = X86_RAX
+			};
+
+			int8_t imm = (int8_t)x86__read_uint8(&in);
+			out->operands[1] = (X86_Operand){
+				X86_OPERAND_IMM, .imm = imm
+			};
+			break;
+		}
+		case X86_ENCODE_reg_ax_imm: {
+			out->data_type = X86_TYPE_WORD;
+
+			out->operand_count = 2;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = X86_RAX
+			};
+
+			int32_t imm = (int16_t)x86__read_uint16(&in);
+			out->operands[1] = (X86_Operand){
+				X86_OPERAND_IMM, .imm = imm
+			};
+			break;
+		}
+		case X86_ENCODE_reg_eax_imm: {
+			out->data_type = X86_TYPE_DWORD;
+
+			out->operand_count = 2;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = X86_RAX
+			};
+
+			int32_t imm = x86__read_uint32(&in);
+			out->operands[1] = (X86_Operand){
+				X86_OPERAND_IMM, .imm = imm
+			};
+			break;
+		}
+		case X86_ENCODE_reg_rax_imm: {
+			out->data_type = X86_TYPE_QWORD;
+
+			out->operand_count = 2;
+			out->operands[0] = (X86_Operand){
+				X86_OPERAND_GPR, .gpr = X86_RAX
+			};
+
+			int32_t imm = x86__read_uint32(&in);
+			out->operands[1] = (X86_Operand){
+				X86_OPERAND_IMM, .imm = imm
+			};
+			break;
+		}
 		case X86_ENCODE_xmmreg_imm: {
 			uint8_t mod_rx_rm = x86__read_uint8(&in);
 			uint8_t mod, rx, rm;
