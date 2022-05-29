@@ -7,3 +7,24 @@ f3 0f 1e fa
 // fuck shit
 c4 e2 61 bc e9
 c4 e2 79 18 c0
+
+// movzx  eax,BYTE PTR [rsp+0x31]
+0f b6 44 24 31
+
+// movzx  rax,BYTE PTR [rsi+rcx*1]
+48 0f b6 04 0e
+
+// shl    rax,1
+48 d1 e0
+
+// sar    rax,1
+48 d1 f8
+
+// cmovns rax,rbx
+48 0f 49 c3
+
+// xchg   QWORD PTR [rbp+0x0],rax
+48 87 45 00
+
+// and    eax,0xffffff00
+25 00 ff ff ff
