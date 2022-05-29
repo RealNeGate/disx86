@@ -5,7 +5,10 @@ f3 0f 1e fa
 3d 00 f0 ff ff
 
 // fuck shit
+// vfnmadd231ps xmm5, xmm3, xmm1
 c4 e2 61 bc e9
+
+// vbroadcastss xmm0, xmm0
 c4 e2 79 18 c0
 
 // movzx  eax,BYTE PTR [rsp+0x31]
