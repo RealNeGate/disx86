@@ -101,6 +101,11 @@ static void dissassemble_crap(X86_Buffer input) {
 		bool has_immediate = inst.flags & (X86_INSTR_IMMEDIATE | X86_INSTR_ABSOLUTE);
 
 		for (int j = 0; j < 4; j++) {
+			X86_DataType dt = inst.data_type;
+			if ((inst.flags & X86_INSTR_TWO_DATA_TYPES) != 0 && j == 1) {
+				dt = inst.data_type2;
+			}
+
 			if (inst.regs[j] == X86_GPR_NONE) {
 				// GPR_NONE is either exit or a placeholder if we've got crap
 				if (has_mem_op) {
@@ -109,9 +114,9 @@ static void dissassemble_crap(X86_Buffer input) {
 					if (inst.flags & X86_INSTR_USE_RIPMEM) {
 						size_t next_rip = (input.data - start) + inst.length;
 
-						snprintf(tmp, sizeof(tmp), "%s ptr [%016"PRIX64"h]", x86_get_data_type_string(inst.data_type), next_rip + inst.disp);
+						snprintf(tmp, sizeof(tmp), "%s ptr [%016"PRIX64"h]", x86_get_data_type_string(dt), next_rip + inst.disp);
 					} else {
-						int l = snprintf(tmp, sizeof(tmp), "%s ptr ", x86_get_data_type_string(inst.data_type));
+						int l = snprintf(tmp, sizeof(tmp), "%s ptr ", x86_get_data_type_string(dt));
 						if (l < 0 || l >= sizeof(tmp)) abort();
 
 						X86_Operand dummy = {
@@ -120,7 +125,7 @@ static void dissassemble_crap(X86_Buffer input) {
 								inst.base, inst.index, inst.scale, inst.disp
 							}
 						};
-						x86_format_operand(tmp + l, sizeof(tmp) - l, &dummy, inst.data_type);
+						x86_format_operand(tmp + l, sizeof(tmp) - l, &dummy, dt);
 					}
 				} else if (has_immediate) {
 					has_immediate = false;
@@ -136,7 +141,6 @@ static void dissassemble_crap(X86_Buffer input) {
 				}
 			} else {
 				bool use_xmm = (inst.flags & X86_INSTR_XMMREG);
-				X86_DataType dt = inst.data_type;
 
 				// hack for MOVQ which does xmm and gpr in the same instruction
 				if (inst.type == X86_INST_MOVQ) {

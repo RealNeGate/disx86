@@ -268,6 +268,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	bool direction = false;
 	bool uses_xmm = false;
 	bool single_operand = false;
+	bool uses_implicit_rax = false;
 
 	enum {
 		NO_IMM,
@@ -386,6 +387,13 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 
+		case X86_ENCODE_reg_eax_imm:
+		case X86_ENCODE_reg_rax_imm: {
+			uses_imm = IMM32;
+			uses_implicit_rax = true;
+			break;
+		}
+
 		case X86_ENCODE_reg32_imm: {
 			uses_imm = IMM32;
 			break;
@@ -403,7 +411,10 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 
-		//case X86_ENCODE_reg64_rm16:
+		case X86_ENCODE_reg32_rm8:
+		case X86_ENCODE_reg32_rm16:
+		case X86_ENCODE_reg64_rm8:
+		case X86_ENCODE_reg64_rm16:
 		case X86_ENCODE_reg64_rm32: {
 			direction = true;
 			uses_modrxrm = true;
@@ -427,12 +438,6 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		out->data_type = X86_TYPE_NONE;
 		break;
 
-		case X86_ENCODE_imm_short:
-		case X86_ENCODE_imm32_near:
-		case X86_ENCODE_imm64_near:
-		out->data_type = X86_TYPE_QWORD;
-		break;
-
 		case X86_ENCODE_mem_imm8:
 		case X86_ENCODE_reg8_rm8:
 		case X86_ENCODE_reg8_mem:
@@ -447,8 +452,43 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm16_reg16:
 		case X86_ENCODE_rm16:
 		case X86_ENCODE_reg16:
-		//case X86_ENCODE_reg64_rm16:
 		out->data_type = X86_TYPE_WORD;
+		break;
+
+		/*case X86_ENCODE_reg16_rm8:
+		out->data_type  = X86_TYPE_WORD;
+		out->data_type2 = X86_TYPE_BYTE;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
+		break;*/
+
+		case X86_ENCODE_reg32_rm8:
+		out->data_type  = X86_TYPE_DWORD;
+		out->data_type2 = X86_TYPE_BYTE;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
+		break;
+
+		case X86_ENCODE_reg32_rm16:
+		out->data_type  = X86_TYPE_DWORD;
+		out->data_type2 = X86_TYPE_WORD;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
+		break;
+
+		case X86_ENCODE_reg64_rm8:
+		out->data_type  = X86_TYPE_QWORD;
+		out->data_type2 = X86_TYPE_BYTE;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
+		break;
+
+		case X86_ENCODE_reg64_rm16:
+		out->data_type  = X86_TYPE_QWORD;
+		out->data_type2 = X86_TYPE_WORD;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
+		break;
+
+		case X86_ENCODE_reg64_rm32: // this is only stuff like MOVSX or MOVZX
+		out->data_type  = X86_TYPE_QWORD;
+		out->data_type2 = X86_TYPE_DWORD;
+		out->flags |= X86_INSTR_TWO_DATA_TYPES;
 		break;
 
 		case X86_ENCODE_rm32_imm8:
@@ -459,7 +499,8 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm32_reg32:
 		case X86_ENCODE_rm32:
 		case X86_ENCODE_reg32:
-		case X86_ENCODE_reg64_rm32:
+		case X86_ENCODE_reg_eax_imm:
+		case X86_ENCODE_mem_imm32:
 		out->data_type = X86_TYPE_DWORD;
 		break;
 
@@ -471,13 +512,13 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_reg64_mem:
 		case X86_ENCODE_rm64_reg64:
 		case X86_ENCODE_rm64_xmmreg:
+		case X86_ENCODE_reg_rax_imm:
 		case X86_ENCODE_rm64:
 		case X86_ENCODE_reg64:
+		case X86_ENCODE_imm_short:
+		case X86_ENCODE_imm32_near:
+		case X86_ENCODE_imm64_near:
 		out->data_type = X86_TYPE_QWORD;
-		break;
-
-		case X86_ENCODE_mem_imm32:
-		out->data_type = X86_TYPE_DWORD;
 		break;
 
 		case X86_ENCODE_mem_xmmreg:
@@ -485,17 +526,19 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_xmmrm_xmmreg:
 		case X86_ENCODE_xmmreg_xmmrm:
 		case X86_ENCODE_xmmrm128_xmmreg:
-		case X86_ENCODE_xmmreg_xmmrm128:
-		// detect data type
-		if (rep) out->data_type = X86_TYPE_SSE_SS;
-		else if (repne) out->data_type = X86_TYPE_SSE_SD;
-		else if (addr16) out->data_type = X86_TYPE_SSE_PD;
-		else out->data_type = X86_TYPE_SSE_PS;
-		break;
+		case X86_ENCODE_xmmreg_xmmrm128: {
+			// detect data type
+			if (rep) out->data_type = X86_TYPE_SSE_SS;
+			else if (repne) out->data_type = X86_TYPE_SSE_SD;
+			else if (addr16) out->data_type = X86_TYPE_SSE_PD;
+			else out->data_type = X86_TYPE_SSE_PS;
+			break;
+		}
 
-		case X86_ENCODE_xmmreg_imm:
-		out->data_type = X86_TYPE_SSE_SS;
-		break;
+		case X86_ENCODE_xmmreg_imm: {
+			out->data_type = X86_TYPE_SSE_SS;
+			break;
+		}
 
 		default: assert(0);
 	}
@@ -525,6 +568,9 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		if (single_operand) out->regs[1] = X86_GPR_NONE;
 	} else if (is_plus_r) {
 		out->regs[0] = (rex & 1 ? 8 : 0) | (op & 0x7);
+	} else if (uses_implicit_rax) {
+		out->regs[0] = X86_RAX;
+		out->regs[1] = X86_GPR_NONE;
 	}
 
 	// Immediates
@@ -2034,11 +2080,11 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op,
 						return snprintf(out, out_capacity, "[%s]",
 										X86__GPR_NAMES[3][op->mem.base]);
 					} else if (op->mem.disp < 0) {
-						return snprintf(out, out_capacity, "[%s%d]",
+						return snprintf(out, out_capacity, "[%s-%Xh]",
 										X86__GPR_NAMES[3][op->mem.base],
-										op->mem.disp);
+										-op->mem.disp);
 					} else {
-						return snprintf(out, out_capacity, "[%s+%xh]",
+						return snprintf(out, out_capacity, "[%s+%Xh]",
 										X86__GPR_NAMES[3][op->mem.base],
 										op->mem.disp);
 					}
@@ -2062,7 +2108,7 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op,
 										X86__GPR_NAMES[3][op->mem.index],
 										1 << op->mem.scale);
 					} else {
-						return snprintf(out, out_capacity, "[%s+%s*%d+%xh]",
+						return snprintf(out, out_capacity, "[%s+%s*%d+%Xh]",
 										X86__GPR_NAMES[3][op->mem.base],
 										X86__GPR_NAMES[3][op->mem.index],
 										1 << op->mem.scale,

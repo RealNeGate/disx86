@@ -34,6 +34,9 @@ typedef enum X86_GPR {
 	X86_RAX = 0, X86_RCX, X86_RDX, X86_RBX, X86_RSP, X86_RBP, X86_RSI, X86_RDI,
 	X86_R8, X86_R9, X86_R10, X86_R11, X86_R12, X86_R13, X86_R14, X86_R15,
 
+	X86_EAX = 0, X86_ECX, X86_EDX, X86_EBX, X86_ESP, X86_EBP, X86_ESI, X86_EDI,
+	X86_R8D, X86_R9D, X86_R10D, X86_R11D, X86_R12D, X86_R13D, X86_R14D, X86_R15D,
+
 	// when using BYTE as the operand type, these are used instead
 	X86_AL = 0, X86_CL, X86_DL, X86_BL, X86_AH, X86_CH, X86_DH, X86_BH,
 
@@ -91,6 +94,9 @@ typedef enum X86_InstrFlags {
 
 	// set if the r/m can be found on the right hand side
 	X86_INSTR_DIRECTION = (1u << 6u),
+
+	// uses the second data type because the instruction is weird like MOVSX or MOVZX
+	X86_INSTR_TWO_DATA_TYPES = (1u << 7u)
 } X86_InstrFlags;
 
 typedef enum X86_OperandType {
@@ -134,9 +140,10 @@ typedef struct {
 typedef struct {
 	X86_InstType type;
 
-	X86_DataType data_type : 8;
-	X86_Segment segment    : 8;
-	X86_InstrFlags flags   : 8;
+	X86_DataType data_type  : 8;
+	X86_DataType data_type2 : 8;
+	X86_Segment segment     : 8;
+	X86_InstrFlags flags    : 8;
 	uint8_t length;
 
 	// immediate operand
