@@ -70,6 +70,29 @@ typedef enum X86_Scale {
 	X86_SCALE_X8
 } X86_Scale;
 
+typedef enum X86_InstrFlags {
+	// uses xmm registers for the reg array
+	X86_INSTR_XMMREG = (1u << 0u),
+
+	// r/m is a memory operand
+	X86_INSTR_USE_MEMOP = (1u << 1u),
+
+	// r/m is a rip-relative address (X86_INSTR_USE_MEMOP is always set when this is set)
+	X86_INSTR_USE_RIPMEM = (1u << 2u),
+
+	// LOCK prefix is present
+	X86_INSTR_LOCK = (1u << 3u),
+
+	// uses a signed immediate
+	X86_INSTR_IMMEDIATE = (1u << 4u),
+
+	// absolute means it's using the 64bit immediate (cannot be applied while a memory operand is active)
+	X86_INSTR_ABSOLUTE = (1u << 5u),
+
+	// set if the r/m can be found on the right hand side
+	X86_INSTR_DIRECTION = (1u << 6u),
+} X86_InstrFlags;
+
 typedef enum X86_OperandType {
 	X86_OPERAND_NONE = 0,
 
@@ -110,13 +133,30 @@ typedef struct {
 
 typedef struct {
 	X86_InstType type;
-	int length;
-	
-	X86_DataType data_type : 8;
-	X86_Segment  segment   : 8;
-	int operand_count      : 8;
 
-	X86_Operand operands[4];
+	X86_DataType data_type : 8;
+	X86_Segment segment    : 8;
+	X86_InstrFlags flags   : 8;
+	uint8_t length;
+
+	// immediate operand
+	//   imm for INSTR_IMMEDIATE
+	//   abs for INSTR_ABSOLUTE
+	union {
+		int32_t  imm;
+		uint64_t abs;
+	};
+
+	// memory operand
+	struct {
+		X86_GPR   base  : 8;
+		X86_GPR   index : 8;
+		X86_Scale scale : 8;
+		int32_t   disp;
+	};
+
+	// normal operands
+	int8_t regs[4];
 } X86_Inst;
 
 typedef enum {

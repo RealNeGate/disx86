@@ -1,7 +1,15 @@
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <assert.h>
+#include <time.h>
 #include "disx86.h"
+
+static long get_nanos(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (long)ts.tv_sec * 1000000000L + ts.tv_nsec;
+}
 
 typedef struct COFF_SectionHeader {
 	char name[8];
@@ -32,6 +40,30 @@ typedef struct COFF_FileHeader {
 static_assert(sizeof(COFF_FileHeader) == 20, "COFF File header size != 20 bytes");
 
 static void dissassemble_crap(X86_Buffer input) {
+#if 0
+	long start_time = get_nanos();
+	int instruction_count = 0;
+
+	while (input.length > 0) {
+		X86_Inst inst;
+		X86_ResultCode result = x86_disasm(input, &inst);
+		if (result != X86_RESULT_SUCCESS) {
+			fprintf(stderr, "disassembler error: %s (", x86_get_result_string(result));
+			for (int i = 0; i < inst.length; i++) {
+				if (i) fprintf(stderr, " ");
+				fprintf(stderr, "%x", input.data[i]);
+			}
+			fprintf(stderr, ")\n");
+
+			abort();
+		}
+
+		input = x86_advance(input, inst.length);
+		instruction_count++;
+	}
+	long end_time = get_nanos();
+	printf("Elapsed: %.3f seconds (%d instructions)\n", (end_time - start_time) / 1000000000.0, instruction_count);
+#else
 	const uint8_t* start = input.data;
 
 	fprintf(stderr, "error: disassembling %zu bytes...\n", input.length);
@@ -65,27 +97,81 @@ static void dissassemble_crap(X86_Buffer input) {
 		x86_format_inst(tmp, sizeof(tmp), inst.type, inst.data_type);
 		printf("%-12s", tmp);
 
-		for (int j = 0; j < inst.operand_count; j++) {
-			if (j) printf(",");
+		bool has_mem_op = inst.flags & X86_INSTR_USE_MEMOP;
+		bool has_immediate = inst.flags & (X86_INSTR_IMMEDIATE | X86_INSTR_ABSOLUTE);
 
-			x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
-			if (inst.operands[j].type == X86_OPERAND_OFFSET) {
-				int64_t base_address = (input.data - start)
-					+ inst.length;
+		for (int j = 0; j < 4; j++) {
+			if (inst.regs[j] == X86_GPR_NONE) {
+				// GPR_NONE is either exit or a placeholder if we've got crap
+				if (has_mem_op) {
+					has_mem_op = false;
 
-				printf("%016llX", (long long)(base_address + inst.operands[j].offset));
-			} else if (inst.operands[j].type == X86_OPERAND_RIP ||
-					   inst.operands[j].type == X86_OPERAND_MEM) {
-				printf("%s ptr ", x86_get_data_type_string(inst.data_type));
+					if (inst.flags & X86_INSTR_USE_RIPMEM) {
+						size_t next_rip = (input.data - start) + inst.length;
 
-				if (inst.segment != X86_SEGMENT_DEFAULT) {
-					printf("%s:%s", x86_get_segment_string(inst.segment), tmp);
+						snprintf(tmp, sizeof(tmp), "%s ptr [%016"PRIX64"h]", x86_get_data_type_string(inst.data_type), next_rip + inst.disp);
+					} else {
+						int l = snprintf(tmp, sizeof(tmp), "%s ptr ", x86_get_data_type_string(inst.data_type));
+						if (l < 0 || l >= sizeof(tmp)) abort();
+
+						X86_Operand dummy = {
+							X86_OPERAND_MEM,
+							.mem = {
+								inst.base, inst.index, inst.scale, inst.disp
+							}
+						};
+						x86_format_operand(tmp + l, sizeof(tmp) - l, &dummy, inst.data_type);
+					}
+				} else if (has_immediate) {
+					has_immediate = false;
+
+					int64_t val = (inst.flags & X86_INSTR_ABSOLUTE ? inst.abs : inst.imm);
+					if (val < 0) {
+						snprintf(tmp, sizeof(tmp), "%"PRId64, (long long) -val);
+					} else {
+						snprintf(tmp, sizeof(tmp), "%"PRIX64"h", (long long) val);
+					}
 				} else {
-					printf("%s", tmp);
+					break;
 				}
 			} else {
-				printf("%s", tmp);
+				bool use_xmm = (inst.flags & X86_INSTR_XMMREG);
+				X86_DataType dt = inst.data_type;
+
+				// hack for MOVQ which does xmm and gpr in the same instruction
+				if (inst.type == X86_INST_MOVQ) {
+					if (j != ((inst.flags & X86_INSTR_DIRECTION) ? 1 : 0)) use_xmm = true;
+				} else if (inst.type == X86_INST_MOVSXD) {
+					if (j == 0) dt = X86_TYPE_QWORD;
+				}
+
+				X86_Operand dummy = {
+					use_xmm ? X86_OPERAND_XMM : X86_OPERAND_GPR, .gpr = inst.regs[j]
+				};
+				x86_format_operand(tmp, sizeof(tmp), &dummy, dt);
 			}
+
+			if (j) printf(",");
+			printf("%s", tmp);
+
+			/*x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
+						if (inst.operands[j].type == X86_OPERAND_OFFSET) {
+							int64_t base_address = (input.data - start)
+								+ inst.length;
+
+							printf("%016llX", (long long)(base_address + inst.operands[j].offset));
+						} else if (inst.operands[j].type == X86_OPERAND_RIP ||
+								   inst.operands[j].type == X86_OPERAND_MEM) {
+							printf("%s ptr ", x86_get_data_type_string(inst.data_type));
+
+							if (inst.segment != X86_SEGMENT_DEFAULT) {
+								printf("%s:%s", x86_get_segment_string(inst.segment), tmp);
+							} else {
+								printf("%s", tmp);
+							}
+						} else {
+							printf("%s", tmp);
+						}*/
 		}
 
 		printf("\n");
@@ -109,10 +195,11 @@ static void dissassemble_crap(X86_Buffer input) {
 
 		input = x86_advance(input, inst.length);
 	}
+#endif
 }
 
 int main(int argc, char* argv[]) {
-	setvbuf(stdout, NULL, _IONBF, 0);
+	//setvbuf(stdout, NULL, _IONBF, 0);
 
 	if (argc <= 1) {
 		x86_print_dfa_DEBUG();
