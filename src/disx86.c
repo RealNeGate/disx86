@@ -225,7 +225,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	// +r means that the bottom 8bits of the opcode encode a register
 	bool is_plus_r = false;
-	uint8_t opcode_byte = 0;
+	uint8_t opcode_byte = op;
 	while (true) {
 		val = dfa[val + op];
 		if (val & 0x40000000) is_plus_r = true;
