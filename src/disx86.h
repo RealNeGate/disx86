@@ -38,13 +38,19 @@ typedef enum X86_GPR {
 	X86_R8D, X86_R9D, X86_R10D, X86_R11D, X86_R12D, X86_R13D, X86_R14D, X86_R15D,
 
 	// when using BYTE as the operand type, these are used instead
-	X86_AL = 0, X86_CL, X86_DL, X86_BL, X86_AH, X86_CH, X86_DH, X86_BH,
+	X86_AL = 0, X86_CL, X86_DL, X86_BL, X86_BPL, X86_SPL, X86_SIL, X86_DIL,
+	X86_R8B, X86_R9B, X86_R10B, X86_R11B, X86_R12B, X86_R13B, X86_R14B, X86_R15B,
+
+	// high registers are weird
+	X86_AH = 16, X86_CH, X86_DH, X86_BH,
 
 	// when using WORD as the operand type
 	X86_AX = 0, X86_CX, X86_DX, X86_BX, X86_SP, X86_BP, X86_SI, X86_DI,
 
     X86_GPR_NONE = -1
 } X86_GPR;
+#define X86_IS_HIGH_GPR(x)  ((x) >= 16)
+#define X86_GET_HIGH_GPR(x) ((x) - 16)
 
 typedef enum X86_XMM {
 	X86_XMM0, X86_XMM1, X86_XMM2,  X86_XMM3,  X86_XMM4,  X86_XMM5,  X86_XMM6,  X86_XMM7,
@@ -102,13 +108,14 @@ typedef enum X86_InstrFlags {
 typedef enum X86_OperandType {
 	X86_OPERAND_NONE = 0,
 
-	X86_OPERAND_GPR,   // rax rcx rdx
-	X86_OPERAND_XMM,   // xmmN
-	X86_OPERAND_MEM,   // [base + index * scale + disp]
-	X86_OPERAND_RIP,   // rip relative addressing
-	X86_OPERAND_IMM,   // imm8/16/32
-	X86_OPERAND_OFFSET,// offset
-	X86_OPERAND_ABS64, // abs64
+	X86_OPERAND_GPR,      // rax rcx rdx
+	X86_OPERAND_GPR_HIGH, // ah  ch  dh
+	X86_OPERAND_XMM,      // xmmN
+	X86_OPERAND_MEM,      // [base + index * scale + disp]
+	X86_OPERAND_RIP,      // rip relative addressing
+	X86_OPERAND_IMM,      // imm8/16/32
+	X86_OPERAND_OFFSET,   // offset
+	X86_OPERAND_ABS64,    // abs64
 } X86_OperandType;
 
 typedef struct {
@@ -137,7 +144,7 @@ typedef struct {
 	size_t length;
 } X86_Buffer;
 
-typedef struct {
+typedef struct X86_Inst {
 	X86_InstType type;
 
 	X86_DataType data_type  : 8;

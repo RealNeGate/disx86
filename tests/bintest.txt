@@ -1,15 +1,14 @@
 // endbr64
 f3 0f 1e fa
 
+// lea esi,[rax+rax*1]
+8d 34 00
+
+// test r9b, r9b
+45 84 db
+
 // cmp eax,0xfffff000
 3d 00 f0 ff ff
-
-// fuck shit
-// vfnmadd231ps xmm5, xmm3, xmm1
-c4 e2 61 bc e9
-
-// vbroadcastss xmm0, xmm0
-c4 e2 79 18 c0
 
 // movzx  eax,BYTE PTR [rsp+0x31]
 0f b6 44 24 31
@@ -26,8 +25,18 @@ c4 e2 79 18 c0
 // cmovns rax,rbx
 48 0f 49 c3
 
+// setne  al
+0f 95 c0
+
 // xchg   QWORD PTR [rbp+0x0],rax
 48 87 45 00
 
 // and    eax,0xffffff00
 25 00 ff ff ff
+
+// fuck shit
+// vfnmadd231ps xmm5, xmm3, xmm1
+c4 e2 61 bc e9
+
+// vbroadcastss xmm0, xmm0
+c4 e2 79 18 c0

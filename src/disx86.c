@@ -225,6 +225,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	// +r means that the bottom 8bits of the opcode encode a register
 	bool is_plus_r = false;
+	uint8_t opcode_byte = 0;
 	while (true) {
 		val = dfa[val + op];
 		if (val & 0x40000000) is_plus_r = true;
@@ -248,7 +249,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			val &= ~0xF0000000;
 			op = rx;
 		} else {
-			op = x86__read_uint8(&in);
+			opcode_byte = op = x86__read_uint8(&in);
 		}
 	}
 
@@ -257,7 +258,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	out->type = (val & 0xFFFF);
 	if (desc->has_cc) {
-		out->type += (op & 0xF);
+		out->type += (opcode_byte & 0xF);
 	}
 
 	// payload
@@ -269,10 +270,10 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	bool uses_xmm = false;
 	bool single_operand = false;
 	bool uses_implicit_rax = false;
+	bool uses_implicit_rcx = false;
 
 	enum {
-		NO_IMM,
-		IMM8, IMM16, IMM32, IMM64
+		NO_IMM, UNITY, IMM8, IMM16, IMM32, IMM64
 	} uses_imm = NO_IMM;
 
 	// TODO(NeGate): redo the ruleset such that i dont need translation here
@@ -314,6 +315,24 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm32:
 		case X86_ENCODE_rm64: {
 			uses_modrxrm = true;
+			mod_rx_rm = x86__read_uint8(&in);
+			single_operand = true;
+			break;
+		}
+
+		case X86_ENCODE_rm8_unity:
+		case X86_ENCODE_rm16_unity:
+		case X86_ENCODE_rm32_unity:
+		case X86_ENCODE_rm64_unity: {
+			uses_imm = UNITY;
+			uses_modrxrm = true;
+			mod_rx_rm = x86__read_uint8(&in);
+			single_operand = true;
+			break;
+		}
+
+		case X86_ENCODE_rm64_reg_cl: {
+			uses_implicit_rcx = true;
 			mod_rx_rm = x86__read_uint8(&in);
 			single_operand = true;
 			break;
@@ -444,6 +463,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm8_reg8:
 		case X86_ENCODE_rm8:
 		case X86_ENCODE_reg8:
+		case X86_ENCODE_rm8_unity:
 		out->data_type = X86_TYPE_BYTE;
 		break;
 
@@ -452,6 +472,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm16_reg16:
 		case X86_ENCODE_rm16:
 		case X86_ENCODE_reg16:
+		case X86_ENCODE_rm16_unity:
 		out->data_type = X86_TYPE_WORD;
 		break;
 
@@ -501,6 +522,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_reg32:
 		case X86_ENCODE_reg_eax_imm:
 		case X86_ENCODE_mem_imm32:
+		case X86_ENCODE_rm32_unity:
 		out->data_type = X86_TYPE_DWORD;
 		break;
 
@@ -508,6 +530,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_rm64_imm32:
 		case X86_ENCODE_reg64_imm:
 		case X86_ENCODE_rm64_imm:
+		case X86_ENCODE_reg64_reg64:
 		case X86_ENCODE_reg64_rm64:
 		case X86_ENCODE_reg64_mem:
 		case X86_ENCODE_rm64_reg64:
@@ -518,6 +541,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_imm_short:
 		case X86_ENCODE_imm32_near:
 		case X86_ENCODE_imm64_near:
+		case X86_ENCODE_rm64_unity:
 		out->data_type = X86_TYPE_QWORD;
 		break;
 
@@ -559,15 +583,29 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		// immediate usage will use the RX for extended opcode
 		if (uses_imm == NO_IMM) {
 			out->regs[!direction] = (rex & 4 ? 8 : 0) | rx;
+			if (rex == 0 && out->data_type == X86_TYPE_BYTE && out->regs[!direction] >= 4) {
+				// use high registers
+				out->regs[!direction] += 16;
+			}
 		} else {
 			out->regs[!direction] = X86_GPR_NONE;
 		}
 
 		out->regs[direction] = x86_parse_memory_op(&in, out, mod, rm, rex);
+		if (rex == 0 && out->data_type == X86_TYPE_BYTE && out->regs[direction] >= 4) {
+			// use high registers
+			out->regs[direction] += 16;
+		}
 
 		if (single_operand) out->regs[1] = X86_GPR_NONE;
+		else if (uses_implicit_rax) out->regs[1] = X86_RCX;
 	} else if (is_plus_r) {
-		out->regs[0] = (rex & 1 ? 8 : 0) | (op & 0x7);
+		out->regs[0] = (rex & 1 ? 8 : 0) | (opcode_byte & 0x7);
+
+		if (rex == 0 && out->data_type == X86_TYPE_BYTE && out->regs[0] >= 4) {
+			// use high registers
+			out->regs[0] += 16;
+		}
 	} else if (uses_implicit_rax) {
 		out->regs[0] = X86_RAX;
 		out->regs[1] = X86_GPR_NONE;
@@ -575,6 +613,11 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 
 	// Immediates
 	switch (uses_imm) {
+		case UNITY: {
+			out->flags |= X86_INSTR_IMMEDIATE;
+			out->imm = 1;
+			break;
+		}
 		case IMM8: {
 			out->flags |= X86_INSTR_IMMEDIATE;
 			out->imm = (int8_t)x86__read_uint8(&in);
@@ -2038,7 +2081,8 @@ X86_Buffer x86_advance(X86_Buffer in, size_t amount) {
 
 size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op, X86_DataType dt) {
 	static const char* X86__GPR_NAMES[4][16] = {
-		{ "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh" },
+		{ "al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil",
+			"r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b" },
 
 		{ "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
 			"r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w" },
@@ -2050,6 +2094,10 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op,
 			"r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" }
 	};
 
+	static const char* X86__HIGH_NAMES[] = {
+		"ah", "ch", "dh", "bh"
+	};
+
 	switch (op->type) {
 		case X86_OPERAND_NONE: {
 			out[0] = '\0';
@@ -2057,6 +2105,9 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op,
 		}
 		case X86_OPERAND_GPR: {
 			return snprintf(out, out_capacity, "%s", X86__GPR_NAMES[dt - X86_TYPE_BYTE][op->gpr]);
+		}
+		case X86_OPERAND_GPR_HIGH: {
+			return snprintf(out, out_capacity, "%s", X86__HIGH_NAMES[op->gpr]);
 		}
 		case X86_OPERAND_XMM: {
 			return snprintf(out, out_capacity, "xmm%d", op->xmm);

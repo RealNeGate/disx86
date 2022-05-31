@@ -132,7 +132,7 @@ static void dissassemble_crap(X86_Buffer input) {
 
 					int64_t val = (inst.flags & X86_INSTR_ABSOLUTE ? inst.abs : inst.imm);
 					if (val < 0) {
-						snprintf(tmp, sizeof(tmp), "%"PRId64, (long long) -val);
+						snprintf(tmp, sizeof(tmp), "-%"PRIX64"h", (long long) -val);
 					} else {
 						snprintf(tmp, sizeof(tmp), "%"PRIX64"h", (long long) val);
 					}
@@ -152,6 +152,10 @@ static void dissassemble_crap(X86_Buffer input) {
 				X86_Operand dummy = {
 					use_xmm ? X86_OPERAND_XMM : X86_OPERAND_GPR, .gpr = inst.regs[j]
 				};
+
+				if (dummy.type == X86_OPERAND_GPR && X86_IS_HIGH_GPR(inst.regs[j])) {
+					dummy.gpr = X86_GET_HIGH_GPR(inst.regs[j]);
+				}
 				x86_format_operand(tmp, sizeof(tmp), &dummy, dt);
 			}
 
