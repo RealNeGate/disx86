@@ -153,6 +153,9 @@ typedef struct X86_Inst {
 	X86_InstrFlags flags    : 8;
 	uint8_t length;
 
+	// normal operands
+	int8_t regs[4];
+
 	// immediate operand
 	//   imm for INSTR_IMMEDIATE
 	//   abs for INSTR_ABSOLUTE
@@ -168,9 +171,6 @@ typedef struct X86_Inst {
 		X86_Scale scale : 8;
 		int32_t   disp;
 	};
-
-	// normal operands
-	int8_t regs[4];
 } X86_Inst;
 
 typedef enum {
