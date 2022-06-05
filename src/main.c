@@ -5,39 +5,14 @@
 #include <time.h>
 #include "disx86.h"
 
+#include "elf.h"
+#include "coff.h"
+
 static long get_nanos(void) {
     struct timespec ts;
     timespec_get(&ts, TIME_UTC);
     return (long)ts.tv_sec * 1000000000L + ts.tv_nsec;
 }
-
-typedef struct COFF_SectionHeader {
-	char name[8];
-	union {
-		uint32_t physical_address;
-		uint32_t virtual_size;
-	} misc;
-	uint32_t  virtual_address;
-	uint32_t  raw_data_size;
-	uint32_t  raw_data_pos;
-	uint32_t  pointer_to_reloc;
-	uint32_t  pointer_to_lineno;
-	uint16_t  num_reloc;
-	uint16_t  num_lineno;
-	uint32_t  characteristics;
-} COFF_SectionHeader;
-static_assert(sizeof(COFF_SectionHeader) == 40, "COFF Section header size != 40 bytes");
-
-typedef struct COFF_FileHeader {
-	uint16_t machine;
-	uint16_t num_sections;
-	uint32_t timestamp;
-	uint32_t symbol_table;
-	uint32_t symbol_count;
-	uint16_t optional_header_size;
-	uint16_t characteristics;
-} COFF_FileHeader;
-static_assert(sizeof(COFF_FileHeader) == 20, "COFF File header size != 20 bytes");
 
 static void dissassemble_crap(X86_Buffer input) {
 #if 0
@@ -250,34 +225,29 @@ int main(int argc, char* argv[]) {
 	if (is_binary) {
 		dissassemble_crap((X86_Buffer){ (uint8_t*)buffer, length });
 	} else {
-		// Locate .text section
-		// TODO(NeGate): this isn't properly checked for endianness... i dont care
-		// here...
-		COFF_FileHeader* file_header = ((COFF_FileHeader*) buffer);
-		COFF_SectionHeader* text_section = NULL;
-		for (size_t i = 0; i < file_header->num_sections; i++) {
-			size_t section_offset = sizeof(COFF_FileHeader) + (i * sizeof(COFF_SectionHeader));
-			COFF_SectionHeader* sec = ((COFF_SectionHeader*) &buffer[section_offset]);
+		ELF_Context ctx = {};
+		if (!parse_elf((uint8_t *)buffer, length, &ctx)) {
+			uint8_t *text_start = NULL;
+			uint64_t text_size = 0;
 
-			// not very robust because it assumes that the compiler didn't
-			// put .text name into a text section and instead did it inplace
-			if (strcmp(sec->name, ".text") == 0 ||
-				strcmp(sec->name, ".text$mn") == 0) {
-				text_section = sec;
-				break;
+			for (int i = 0; i < ctx.num_sects; i++) {
+				Section s = ctx.sections[i];
+				if (!strcmp(s.name, ".text")) {
+					text_start = s.data.data;
+					text_size = s.data.length;
+					break;
+				}
 			}
-		}
+			if (!text_start) {
+				fprintf(stderr, "error: could not find .text section in ELF file!\n");
+			}
 
-		if (text_section == NULL) {
-			fprintf(stderr, "error: could not locate .text section\n");
-			abort();
+			dissassemble_crap((X86_Buffer){ text_start, text_size });
+		} else {
+			COFF_SectionHeader *text_section = get_text_section(buffer);
+			const uint8_t* text_section_start = (uint8_t*) &buffer[text_section->raw_data_pos];
+			dissassemble_crap((X86_Buffer){ text_section_start, text_section->raw_data_size });
 		}
-
-		const uint8_t* text_section_start = (uint8_t*) &buffer[text_section->raw_data_pos];
-		dissassemble_crap((X86_Buffer){
-							  text_section_start,
-							  text_section->raw_data_size
-						  });
 	}
 
 	return 0;
