@@ -4,7 +4,7 @@
 
 #include "elf.h"
 
-#define myassert(x, ...) do { if (!(x)) { dprintf(2, __VA_ARGS__); exit(1); } } while (0)
+#define myassert(x, ...) do { if (!(x)) { fprintf(stderr, __VA_ARGS__); exit(1); } } while (0)
 
 static inline Slice into_slice(u8 *data, u64 length) {
 	Slice s;

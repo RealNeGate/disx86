@@ -144,6 +144,8 @@ static int8_t x86_parse_memory_op(X86_Buffer* restrict in, X86_Inst* restrict ou
 }
 
 static void dump(int start, int depth) {
+	printf(" %s\n\n", descs[0].name);
+	
 	for (int i = 0; i < 256; i++) if (dfa[start+i] != 0) {
 		for (int j = 0; j < depth; j++) printf("  ");
 		printf("0x%02x", i);
