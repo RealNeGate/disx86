@@ -5,6 +5,7 @@ build/
 *.exe
 *.pdb
 *.dll
+*.so
 
 stb_image.c
 a.c
