@@ -4,7 +4,7 @@ f3 0f 1e fa
 // lea esi,[rax+rax*1]
 8d 34 00
 
-// test r9b, r9b
+// test r11b, r11b
 45 84 db
 
 // cmp eax,0xfffff000
