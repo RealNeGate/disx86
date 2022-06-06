@@ -27,7 +27,7 @@ const static int dfa[] = {
 	[0x1a0f] = 0x1900, 
 	[0x1bf3] = 0x1a00, 
 	[0x1c00] = 0x20110006 /* rm64,imm END6 */, [0x1c01] = 0x201100c7 /* rm64,imm END199 */, [0x1c02] = 0x20110005 /* rm64,imm END5 */, [0x1c03] = 0x20110107 /* rm64,imm END263 */, [0x1c04] = 0x20110007 /* rm64,imm END7 */, [0x1c05] = 0x2011011c /* rm64,imm END284 */, [0x1c06] = 0x20110133 /* rm64,imm END307 */, [0x1c07] = 0x20110022 /* rm64,imm END34 */, 
-	[0x1d00] = 0x200c0006 /* reg_rax,sbytedword END6 */, [0x1d01] = 0x200c00c7 /* reg_rax,sbytedword END199 */, [0x1d02] = 0x200c0005 /* reg_rax,sbytedword END5 */, [0x1d03] = 0x200c0107 /* reg_rax,sbytedword END263 */, [0x1d04] = 0x200c0007 /* reg_rax,sbytedword END7 */, [0x1d05] = 0x200c011c /* reg_rax,sbytedword END284 */, [0x1d06] = 0x200c0133 /* reg_rax,sbytedword END307 */, [0x1d07] = 0x200c0022 /* reg_rax,sbytedword END34 */, 
+	[0x1d00] = 0x203e0006 /* rm64,imm8 END6 */, [0x1d01] = 0x203e00c7 /* rm64,imm8 END199 */, [0x1d02] = 0x203e0005 /* rm64,imm8 END5 */, [0x1d03] = 0x203e0107 /* rm64,imm8 END263 */, [0x1d04] = 0x203e0007 /* rm64,imm8 END7 */, [0x1d05] = 0x203e011c /* rm64,imm8 END284 */, [0x1d06] = 0x203e0133 /* rm64,imm8 END307 */, [0x1d07] = 0x203e0022 /* rm64,imm8 END34 */, 
 	[0x1e00] = 0x2037010f /* reg64 END271 */, [0x1e01] = 0x2037011b /* reg64 END283 */, 
 	[0x1f04] = 0x20370113 /* reg64 END275 */, 
 	[0x2006] = 0x20370254 /* reg64 END596 */, [0x2007] = 0x20370259 /* reg64 END601 */, 

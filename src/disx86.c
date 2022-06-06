@@ -176,8 +176,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 	memset(out, 0, sizeof(*out));
 	memset(out->regs, 0xFF, sizeof(out->regs));
 
-	if (in.length >= 4 &&
-		memcmp(in.data, (uint8_t[]) { 0xF3, 0x0F, 0x1E, 0xFA }, 4) == 0) {
+	if (in.length >= 4 && memcmp(in.data, (uint8_t[]) { 0xF3, 0x0F, 0x1E, 0xFA }, 4) == 0) {
 		// endbr64 hack
 		out->type = X86_INST_ENDBR64;
 		out->length = 4;
@@ -419,7 +418,13 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 
-		case X86_ENCODE_reg_eax_imm:
+        case X86_ENCODE_reg_al_imm: {
+			uses_imm = IMM8;
+			uses_implicit_rax = true;
+			break;
+        }
+
+        case X86_ENCODE_reg_eax_imm:
 		case X86_ENCODE_reg_rax_imm: {
 			uses_imm = IMM32;
 			uses_implicit_rax = true;
@@ -477,6 +482,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		out->data_type = X86_TYPE_NONE;
 		break;
 
+        case X86_ENCODE_reg_al_imm:
         case X86_ENCODE_rm8_imm:
         case X86_ENCODE_reg8_imm:
         case X86_ENCODE_rm8_imm8:
@@ -490,7 +496,8 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		out->data_type = X86_TYPE_BYTE;
 		break;
 
-		case X86_ENCODE_reg16_rm16:
+        case X86_ENCODE_reg_ax_imm:
+        case X86_ENCODE_reg16_rm16:
 		case X86_ENCODE_reg16_mem:
 		case X86_ENCODE_rm16_reg16:
 		case X86_ENCODE_rm16:
