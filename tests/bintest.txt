@@ -40,6 +40,12 @@ c0 e8 04
 // mov al,0x0
 b0 00
 
+// and rsp,0xfffffffffffffff0
+48 83 e4 f0
+
+// cmp    DWORD PTR [rip+0xb2bbc],0x0
+83 3d bc 2b 0b 00 00
+
 // fuck shit
 // vfnmadd231ps xmm5, xmm3, xmm1
 c4 e2 61 bc e9
