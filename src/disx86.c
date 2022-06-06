@@ -145,7 +145,7 @@ static int8_t x86_parse_memory_op(X86_Buffer* restrict in, X86_Inst* restrict ou
 
 static void dump(int start, int depth) {
 	printf(" %s\n\n", descs[0].name);
-	
+
 	for (int i = 0; i < 256; i++) if (dfa[start+i] != 0) {
 		for (int j = 0; j < depth; j++) printf("  ");
 		printf("0x%02x", i);
@@ -293,7 +293,18 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 
-		case X86_ENCODE_mem_imm8: {
+        case X86_ENCODE_reg8_imm: {
+			uses_imm = IMM8;
+            if (!is_plus_r) {
+                uses_modrxrm = true;
+                mod_rx_rm = x86__read_uint8(&in);
+			}
+            break;
+        }
+
+        case X86_ENCODE_rm8_imm:
+        case X86_ENCODE_rm8_imm8:
+        case X86_ENCODE_mem_imm8: {
 			uses_imm = IMM8;
 			uses_modrxrm = true;
 			mod_rx_rm = x86__read_uint8(&in);
@@ -415,6 +426,13 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 			break;
 		}
 
+        case X86_ENCODE_reg_eax_sbytedword:
+		case X86_ENCODE_reg_rax_sbytedword: {
+			uses_imm = IMM8;
+			uses_implicit_rax = true;
+			break;
+		}
+
 		case X86_ENCODE_reg32_imm: {
 			uses_imm = IMM32;
 			break;
@@ -459,7 +477,10 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		out->data_type = X86_TYPE_NONE;
 		break;
 
-		case X86_ENCODE_mem_imm8:
+        case X86_ENCODE_rm8_imm:
+        case X86_ENCODE_reg8_imm:
+        case X86_ENCODE_rm8_imm8:
+        case X86_ENCODE_mem_imm8:
 		case X86_ENCODE_reg8_rm8:
 		case X86_ENCODE_reg8_mem:
 		case X86_ENCODE_rm8_reg8:
@@ -544,7 +565,9 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
 		case X86_ENCODE_imm32_near:
 		case X86_ENCODE_imm64_near:
 		case X86_ENCODE_rm64_unity:
-		out->data_type = X86_TYPE_QWORD;
+		case X86_ENCODE_reg_eax_sbytedword:
+		case X86_ENCODE_reg_rax_sbytedword:
+        out->data_type = X86_TYPE_QWORD;
 		break;
 
 		case X86_ENCODE_mem_xmmreg:
