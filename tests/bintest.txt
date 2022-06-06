@@ -34,6 +34,12 @@ f3 0f 1e fa
 // and    eax,0xffffff00
 25 00 ff ff ff
 
+// shr al,0x4
+c0 e8 04
+
+// mov al,0x0
+b0 00
+
 // fuck shit
 // vfnmadd231ps xmm5, xmm3, xmm1
 c4 e2 61 bc e9
