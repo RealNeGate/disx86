@@ -549,6 +549,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
         case X86_ENCODE_reg32_rm32:
         case X86_ENCODE_reg32_mem:
         case X86_ENCODE_rm32_reg32:
+        case X86_ENCODE_reg32_reg32:
         case X86_ENCODE_rm32:
         case X86_ENCODE_reg32:
         case X86_ENCODE_reg_eax_imm:
