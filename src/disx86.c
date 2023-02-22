@@ -52,9 +52,9 @@ inline static uint16_t x86__read_uint16(X86_Buffer* restrict in) {
     assert(in->length >= 2);
 
     uint16_t result = *((uint16_t*)in->data);
-#if DISX86_NEEDS_SWAP
+    #if DISX86_NEEDS_SWAP
     result = __builtin_bswap16(result);
-#endif
+    #endif
 
     in->data += 2;
     in->length -= 2;
@@ -65,9 +65,9 @@ inline static uint32_t x86__read_uint32(X86_Buffer* restrict in) {
     assert(in->length >= 4);
 
     uint32_t result = *((uint32_t*)in->data);
-#if DISX86_NEEDS_SWAP
+    #if DISX86_NEEDS_SWAP
     result = __builtin_bswap32(result);
-#endif
+    #endif
 
     in->data += 4;
     in->length -= 4;
@@ -78,9 +78,9 @@ inline static uint64_t x86__read_uint64(X86_Buffer* restrict in) {
     assert(in->length >= 8);
 
     uint64_t result = *((uint64_t*)in->data);
-#if DISX86_NEEDS_SWAP
+    #if DISX86_NEEDS_SWAP
     result = __builtin_bswap64(result);
-#endif
+    #endif
 
     in->data += 8;
     in->length -= 8;
@@ -248,6 +248,7 @@ X86_ResultCode x86_disasm(X86_Buffer in, X86_Inst* restrict out) {
             uint8_t mod, rx, rm;
             DECODE_MODRXRM(mod, rx, rm, mod_rx_rm);
 
+            (void)mod,(void)rm;
             val &= ~0xF0000000;
             op = rx;
         } else {
@@ -735,45 +736,45 @@ size_t x86_format_operand(char* out, size_t out_capacity, const X86_Operand* op,
             if (op->mem.index == X86_GPR_NONE) {
                 if (op->mem.base == X86_GPR_NONE) {
                     return snprintf(out, out_capacity, "[%xh]",
-                                    op->mem.disp);
+                        op->mem.disp);
                 } else {
                     if (op->mem.disp == 0) {
                         return snprintf(out, out_capacity, "[%s]",
-                                        X86__GPR_NAMES[3][op->mem.base]);
+                            X86__GPR_NAMES[3][op->mem.base]);
                     } else if (op->mem.disp < 0) {
                         return snprintf(out, out_capacity, "[%s-%Xh]",
-                                        X86__GPR_NAMES[3][op->mem.base],
-                                        -op->mem.disp);
+                            X86__GPR_NAMES[3][op->mem.base],
+                            -op->mem.disp);
                     } else {
                         return snprintf(out, out_capacity, "[%s+%Xh]",
-                                        X86__GPR_NAMES[3][op->mem.base],
-                                        op->mem.disp);
+                            X86__GPR_NAMES[3][op->mem.base],
+                            op->mem.disp);
                     }
                 }
             } else {
                 if (op->mem.base == X86_GPR_NONE) {
                     if (op->mem.disp == 0) {
                         return snprintf(out, out_capacity, "[%s*%d]",
-                                        X86__GPR_NAMES[3][op->mem.index],
-                                        1 << op->mem.scale);
+                            X86__GPR_NAMES[3][op->mem.index],
+                            1 << op->mem.scale);
                     } else {
                         return snprintf(out, out_capacity, "[%s*%d+%xh]",
-                                        X86__GPR_NAMES[3][op->mem.index],
-                                        1 << op->mem.scale,
-                                        op->mem.disp);
+                            X86__GPR_NAMES[3][op->mem.index],
+                            1 << op->mem.scale,
+                            op->mem.disp);
                     }
                 } else {
                     if (op->mem.disp == 0) {
                         return snprintf(out, out_capacity, "[%s+%s*%d]",
-                                        X86__GPR_NAMES[3][op->mem.base],
-                                        X86__GPR_NAMES[3][op->mem.index],
-                                        1 << op->mem.scale);
+                            X86__GPR_NAMES[3][op->mem.base],
+                            X86__GPR_NAMES[3][op->mem.index],
+                            1 << op->mem.scale);
                     } else {
                         return snprintf(out, out_capacity, "[%s+%s*%d+%Xh]",
-                                        X86__GPR_NAMES[3][op->mem.base],
-                                        X86__GPR_NAMES[3][op->mem.index],
-                                        1 << op->mem.scale,
-                                        op->mem.disp);
+                            X86__GPR_NAMES[3][op->mem.base],
+                            X86__GPR_NAMES[3][op->mem.index],
+                            1 << op->mem.scale,
+                            op->mem.disp);
                     }
                 }
             }

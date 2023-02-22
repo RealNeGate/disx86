@@ -15,7 +15,7 @@ static long get_nanos(void) {
 }
 
 static void dissassemble_crap(X86_Buffer input) {
-#if 0
+    #if 0
     long start_time = get_nanos();
     int instruction_count = 0;
 
@@ -38,7 +38,7 @@ static void dissassemble_crap(X86_Buffer input) {
     }
     long end_time = get_nanos();
     printf("Elapsed: %.3f seconds (%d instructions)\n", (end_time - start_time) / 1000000000.0, instruction_count);
-#else
+    #else
     const uint8_t* start = input.data;
 
     fprintf(stderr, "error: disassembling %zu bytes...\n", input.length);
@@ -47,9 +47,11 @@ static void dissassemble_crap(X86_Buffer input) {
         X86_ResultCode result = x86_disasm(input, &inst);
         if (result != X86_RESULT_SUCCESS) {
             printf("disassembler error: %s (", x86_get_result_string(result));
+
+            if (result == X86_RESULT_UNKNOWN_OPCODE) inst.length = 10;
             for (int i = 0; i < inst.length; i++) {
                 if (i) printf(" ");
-                printf("%x", input.data[i]);
+                printf("%02x", input.data[i]);
             }
             printf(")\n");
 
@@ -140,25 +142,6 @@ static void dissassemble_crap(X86_Buffer input) {
 
             if (j) printf(",");
             printf("%s", tmp);
-
-            /*x86_format_operand(tmp, sizeof(tmp), &inst.operands[j], inst.data_type);
-                        if (inst.operands[j].type == X86_OPERAND_OFFSET) {
-                            int64_t base_address = (input.data - start)
-                                + inst.length;
-
-                            printf("%016llX", (long long)(base_address + inst.operands[j].offset));
-                        } else if (inst.operands[j].type == X86_OPERAND_RIP ||
-                                   inst.operands[j].type == X86_OPERAND_MEM) {
-                            printf("%s ptr ", x86_get_data_type_string(inst.data_type));
-
-                            if (inst.segment != X86_SEGMENT_DEFAULT) {
-                                printf("%s:%s", x86_get_segment_string(inst.segment), tmp);
-                            } else {
-                                printf("%s", tmp);
-                            }
-                        } else {
-                            printf("%s", tmp);
-                        }*/
         }
 
         printf("\n");
@@ -182,7 +165,7 @@ static void dissassemble_crap(X86_Buffer input) {
 
         input = x86_advance(input, inst.length);
     }
-#endif
+    #endif
 }
 
 int main(int argc, char* argv[]) {
